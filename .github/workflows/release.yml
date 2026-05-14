@@ -123,6 +123,8 @@ jobs:
             > assets/onnxruntime_darwin_arm64.dylib
 
       - name: Build
+        env:
+          CGO_LDFLAGS: "-Wl,-ld_classic"
         run: |
           mkdir -p bin
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
@@ -162,6 +164,8 @@ jobs:
             > assets/onnxruntime_darwin_amd64.dylib
 
       - name: Build
+        env:
+          CGO_LDFLAGS: "-Wl,-ld_classic"
         run: |
           mkdir -p bin
           CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
