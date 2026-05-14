@@ -1,0 +1,1977 @@
+[
+  {
+    "text": "init {\n    $privsep = $lib.import(zw.webhook.privsep, debug=$lib.debug)\n\n    $privsep.addWebhook($cmdopts.name, $cmdopts.url, $cmdopts.service, $cmdopts.global)\n}",
+    "file": "storm/commands/zw.webhook.add.storm",
+    "chunk_type": "init",
+    "description": "Imports a webhook privilege separation library and registers a new webhook with the specified name, URL, service, and global scope settings.",
+    "result_tags": [
+      "configuration",
+      "utility",
+      "webhook_configuration"
+    ],
+    "technique_tags": [
+      "init_block",
+      "slack"
+    ]
+  },
+  {
+    "text": "init {\n    $privsep = $lib.import(zw.webhook.privsep, debug=$lib.debug)\n\n    $privsep.deleteWebhook($cmdopts.name)\n}",
+    "file": "storm/commands/zw.webhook.delete.storm",
+    "chunk_type": "init",
+    "description": "Deletes a webhook by name using the zw.webhook.privsep library with optional debug mode.",
+    "result_tags": [
+      "configuration",
+      "utility",
+      "webhook_deletion"
+    ],
+    "technique_tags": [
+      "init_block",
+      "slack"
+    ]
+  },
+  {
+    "text": "init {\n    $privsep = $lib.import(zw.webhook.privsep, debug=$lib.debug)\n\n    $privsep.listWebhooks($cmdopts.all)\n}",
+    "file": "storm/commands/zw.webhook.list.storm",
+    "chunk_type": "init",
+    "description": "Lists all webhooks configured in the system, with optional filtering based on command options.",
+    "result_tags": [
+      "configuration",
+      "reporting",
+      "webhook_management"
+    ],
+    "technique_tags": [
+      "init_block",
+      "slack"
+    ]
+  },
+  {
+    "text": "init {\n    if $cmdopts.debug { $lib.debug = $lib.true }\n\n    $api = $lib.import(zw.sinkdb.api, debug=$lib.debug)\n    $privsep = $lib.import(zw.sinkdb.privsep, debug=$lib.debug)\n\n    if ($cmdopts.no_awareness and $cmdopts.no_scanners and $cmdopts.no_sinkholes) {\n        $lib.warn(\"no categories of sinkdb data enabled for import\")\n    }\n\n    $recordsToModel = ([])\n\n    if (not $cmdopts.no_awareness) {\n        if $lib.debug { $lib.print(\"fetching awareness indicators\") }\n        $data = $api.exportIndicators(awareness, $cmdopts.asof)\n        if (not $data) {\n            $lib.warn(\"failed to get awareness data from sinkdb\")\n        }\n        $recordsToModel.extend($data)\n    }\n\n    if (not $cmdopts.no_scanners) {\n        if $lib.debug { $lib.print(\"fetching scanner indicators\") }\n        $data = $api.exportIndicators(scanners, $cmdopts.asof)\n        if (not $data) {\n            $lib.warn(\"failed to get scanner data from sinkdb\")\n        }\n        $recordsToModel.extend($data)\n    }\n\n    if (not $cmdopts.no_sinkholes) {\n        if $lib.debug { $lib.print(\"fetching sinkhole indicators\") }\n        $data = $api.exportIndicators(sinkholes, $cmdopts.asof)\n        if (not $data) {\n            $lib.warn(\"failed to get sinkhole data from sinkdb\")\n        }\n        $recordsToModel.extend($data)\n    }\n    \n    $lib.print(\"modeling {d} records from sinkdb\", d=$recordsToModel.size())\n    divert $cmdopts.yield $privsep.modelExportResponse($recordsToModel)\n}",
+    "file": "storm/commands/zw.sinkdb.import.storm",
+    "chunk_type": "init",
+    "description": "Imports and models threat indicators from a sinkhole database (SinkDB) across multiple categories: awareness, scanners, and sinkholes.",
+    "result_tags": [
+      "cti_triage",
+      "data_export",
+      "feed_ingest",
+      "node_creation",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "conditional",
+      "init_block",
+      "lib_print",
+      "lib_warn",
+      "yield"
+    ]
+  },
+  {
+    "text": "init {\n    $privsep = $lib.import(zw.sinkdb.privsep)\n    \n    if ($cmdopts.self) {\n        $lib.print(\"Setting SinkDB HTTPS API key for the current user.\")\n    } else {\n        if (not $lib.user.allowed(\"zw.sinkdb.admin\")) {\n            $lib.exit(\"failed to set sinkdb global API key, missing zw.sinkdb.admin perms\")\n        }\n        $lib.print(\"Setting SinkDB HTTPS API key for all users.\")\n    }\n\n    $privsep.setApiKey($cmdopts.apikey, $cmdopts.self)\n}",
+    "file": "storm/commands/zw.sinkdb.setup.apikey.storm",
+    "chunk_type": "init",
+    "description": "Sets a SinkDB HTTPS API key either for the current user or globally for all users, with permission checking for global configuration.",
+    "result_tags": [
+      "access_control",
+      "configuration",
+      "credential_management"
+    ],
+    "technique_tags": [
+      "conditional",
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "init {\n    $privsep = $lib.import(zw.sinkdb.privsep)\n\n    $privsep.setTagPrefix($cmdopts.tagname)\n    $lib.print(\"Changed the SinkDB tag prefix to #{p}\", p=$privsep.getTagPrefix())\n}",
+    "file": "storm/commands/zw.sinkdb.setup.tagprefix.storm",
+    "chunk_type": "init",
+    "description": "Sets and displays the SinkDB tag prefix configuration by importing the privilege separation module and applying the specified tag name option.",
+    "result_tags": [
+      "configuration",
+      "utility"
+    ],
+    "technique_tags": [
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "// Model the exported data from SinkDB. Creates nodes.\n// Args:\n//   - $data: list of dicts of data from SinkDB\n// Yields nodes",
+    "file": "storm/modules/zw.sinkdb.privsep.storm",
+    "chunk_type": "window",
+    "description": "Creates nodes from exported data dictionaries from SinkDB.",
+    "result_tags": [
+      "bulk_operation",
+      "data_import",
+      "node_creation"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "// import libraries\n$triage = $lib.import(zw.triage)\n$api = $lib.import(zw.triage.api)\n$privsep = $lib.import(zw.triage.privsep)\n\n// get the overview report\n$report = $api.getOverviewReportForId($cmdopts.sampleId)\nif ($report = $lib.null) {\n    $lib.exit(\"Failed to get overview report for {id}\", id=$cmdopts.sampleId)\n}\n\n// check if it is already modeled\nif (not $cmdopts.force and $triage.isSampleModeled($report.sample.sha256)) {\n    $lib.warn(\"The file:bytes for {id} already has a report ingested, use --force to re-ingest\", id=$cmdopts.sampleId)\n} else {\n    // not modeled, model it\n    $privsep.modelOverviewReport($report)\n\n    $lib.print(\"Ingested {id} from Hatching Triage\", id=$cmdopts.sampleId)\n}\n\nfini { file:bytes:sha256=$report.sample.sha256 }",
+    "file": "storm/commands/zw.triage.ingest.id.storm",
+    "chunk_type": "window",
+    "description": "Retrieves an overview report from Hatching Triage API for a given sample ID and ingests it into the graph unless already modeled, returning the file:bytes node with the sample's SHA256 hash.",
+    "result_tags": [
+      "deduplication",
+      "feed_ingest",
+      "file_enrichment",
+      "malware_analysis"
+    ],
+    "technique_tags": [
+      "conditional",
+      "lib_print",
+      "lib_warn"
+    ]
+  },
+  {
+    "text": "$setup = $lib.import(zw.triage.setup)\n\nif ($cmdopts.self) {\n    $lib.print(\"Setting Triage API key for the current user.\")\n} else {\n    $lib.print(\"Setting Triage API key for all users.\")\n}\n\n$setup.setApiKey($cmdopts.apikey, $cmdopts.self)",
+    "file": "storm/commands/zw.triage.setup.apikey.storm",
+    "chunk_type": "window",
+    "description": "Configures a Triage API key for the current user or all users depending on the specified option.",
+    "result_tags": [
+      "api_setup",
+      "configuration",
+      "credential_management"
+    ],
+    "technique_tags": [
+      "conditional",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "// Name of the dictionary key used to store the Tria.ge API key\n$apiKeyName = \"zw.triage:apikey\"\n\n// Get the Tria.ge API key\n// Args: n/a\n// Returns: str (the API key)\nfunction getApiKey() {\n    // see if the user has their own key set\n    $apikey = $lib.user.vars.get($apiKeyName)\n    if ($apikey) {\n        return($apikey)\n    }\n\n    // no user key, check for global\n    $apikey = $lib.globals.get($apiKeyName)\n    if ($apikey) {\n        return($apikey)\n    }\n\n    // no key in either, bail\n    $lib.exit(\"Hatching Triage API key is not set. Use zw.triage.setup.apikey to set one.\")\n}\n\n// Set the Tria.ge API key\n// Args:",
+    "file": "storm/modules/zw.triage.setup.storm",
+    "chunk_type": "window",
+    "description": "Retrieves the Hatching Triage API key from user or global variables, with fallback logic and error handling.",
+    "result_tags": [
+      "configuration",
+      "utility"
+    ],
+    "technique_tags": [
+      "conditional",
+      "function_def",
+      "globals_lookup",
+      "return"
+    ]
+  },
+  {
+    "text": "// Set the Tria.ge API key\n// Args:\n//  - key (str): the API key to save\n//  - user (bool): if true, key will be stored to user vars instead of globals\n// Returns: n/a",
+    "file": "storm/modules/zw.triage.setup.storm",
+    "chunk_type": "window",
+    "description": "Stores a Triage API key for authentication, either globally or in user-specific variables.",
+    "result_tags": [
+      "api_integration",
+      "configuration"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "init {\n    $privsep = $lib.import(ex.malpedia.privsep, debug=$lib.debug)\n\n    if ($cmdopts.self) {\n        $lib.print(\"Setting Malpedia API key for the current user.\")\n    } else {\n        $lib.print(\"Setting Malpedia API key for all users.\")\n    }\n\n    $key_status_ok = $privsep.setMalpediaAPIKey($cmdopts.apikey, $cmdopts.self)\n\n    if ($key_status_ok) {\n        if ($lib.debug) {$lib.print(\"Malpedia API key set successfully\")}\n    } else {\n        $lib.warn(\"Failed setting the key for the Malpedia API. Check if the token you provided is valid.\")\n    }\n\n}",
+    "file": "storm/commands/ex.malpedia.setup.apikey.storm",
+    "chunk_type": "init",
+    "description": "Sets a Malpedia API key for the current user or all users with validation and debug output.",
+    "result_tags": [
+      "api_integration",
+      "configuration",
+      "credential_management"
+    ],
+    "technique_tags": [
+      "conditional",
+      "init_block",
+      "lib_print",
+      "lib_warn"
+    ]
+  },
+  {
+    "text": "init {\n    $privsep = $lib.import(ex.malpedia.privsep)\n\n    $privsep.setTagPrefix($cmdopts.tagname)\n    $lib.print(\"Changed the Malpedia tag prefix to #{p}\", p=$privsep.getTagPrefix())\n}",
+    "file": "storm/commands/ex.malpedia.setup.tagprefix.storm",
+    "chunk_type": "init",
+    "description": "Configures and updates the tag prefix for Malpedia malware classification by importing a privilege separation library and setting a custom tag name.",
+    "result_tags": [
+      "configuration",
+      "malware_analysis",
+      "tag_assignment"
+    ],
+    "technique_tags": [
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "function getMalpediaAPIKey() {\n    // see if the user has their own key set\n    $apikey = $lib.user.vars.get(\"malpedia:apikey\")\n    if ($apikey) {\n        return($apikey)\n    }\n\n    // no user key, check for global\n    $apikey = $lib.globals.get(\"malpedia:apikey\")\n    if ($apikey) {\n        return($apikey)\n    }\n \n    return(\"none\")\n}",
+    "file": "storm/modules/ex.malpedia.privsep.storm",
+    "chunk_type": "function",
+    "description": "Retrieves the Malpedia API key from user variables, falling back to global configuration, or returns 'none' if neither exists.",
+    "result_tags": [
+      "configuration",
+      "utility"
+    ],
+    "technique_tags": [
+      "conditional",
+      "function_def",
+      "globals_lookup",
+      "return"
+    ]
+  },
+  {
+    "text": "init {\n    $privsep = $lib.import(ex.threatfox.privsep)\n\n    $privsep.setTagPrefix($cmdopts.tagname)\n    $lib.print(\"Changed the ThreatFox tag prefix to #{p}\", p=$privsep.getTagPrefix())\n}",
+    "file": "storm/commands/ex.threatfox.setup.tagprefix.storm",
+    "chunk_type": "init",
+    "description": "Sets the ThreatFox tag prefix to a user-specified value and prints the updated prefix.",
+    "result_tags": [
+      "configuration",
+      "tag_assignment",
+      "utility"
+    ],
+    "technique_tags": [
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "init {\n    $privsep = $lib.import(cyl.onyphe.privsep)\n    \n    if ($cmdopts.self) {\n        $lib.print(\"Setting Onyphe API key for the current user.\")\n    } else {\n        if (not $lib.user.allowed(\"cyl.onyphe.admin\")) {\n            $lib.exit(\"failed to set onyphe global API key, missing cyl.onyphe.admin perms\")\n        }\n        $lib.print(\"Setting Onyphe API key for all users.\")\n    }\n\n    $privsep.setApiKey($cmdopts.apikey, $cmdopts.self)\n}",
+    "file": "storm/commands/cyl.onyphe.setup.apikey.storm",
+    "chunk_type": "init",
+    "description": "Sets the Onyphe API key either for the current user or globally for all users, with permission validation for global configuration.",
+    "result_tags": [
+      "api_key_management",
+      "authorization",
+      "configuration"
+    ],
+    "technique_tags": [
+      "conditional",
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "init {\n    $privsep = $lib.import(cyl.onyphe.privsep)\n    $privsep.setProxy($cmdopts.proxy)\n    $lib.print(\"Changed the proxy to #{p}\", p=$privsep.getProxy())\n}",
+    "file": "storm/commands/cyl.onyphe.setup.proxy.storm",
+    "chunk_type": "init",
+    "description": "Sets a proxy configuration for the Onyphe service and displays the updated proxy address.",
+    "result_tags": [
+      "configuration",
+      "utility"
+    ],
+    "technique_tags": [
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "init {\n    $privsep = $lib.import(cyl.onyphe.privsep)\n    $privsep.setTagPrefix($cmdopts.tagname)\n    $lib.print(\"Changed the Onyphe tag prefix to #{p}\", p=$privsep.getTagPrefix())\n}",
+    "file": "storm/commands/cyl.onyphe.setup.tagprefix.storm",
+    "chunk_type": "init",
+    "description": "Sets the tag prefix for Onyphe data enrichment and displays the configured prefix.",
+    "result_tags": [
+      "configuration",
+      "tag_assignment",
+      "utility"
+    ],
+    "technique_tags": [
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "// Make an API call to Onyphe\n// Args\n//   - $querystr (str): Query string to append to the POST body (which this function will add the API key to)\n// Returns: prim (JSON dictionary) or $lib.false",
+    "file": "storm/modules/cyl.onyphe.privsep.storm",
+    "chunk_type": "window",
+    "description": "This is a function definition that makes an API call to Onyphe with a query string and API key for external data enrichment.",
+    "result_tags": [
+      "api_integration",
+      "data_enrichment",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "// Make an API call to Onyphe\n// Args\n//   - $querystr (str): Query string to append to the POST body (which this function will add the API key to)\n// Returns: prim (JSON dictionary) or $lib.false",
+    "file": "storm/modules/cyl.onyphe.privsep.storm",
+    "chunk_type": "window",
+    "description": "This is a function definition that makes an API call to Onyphe by appending a query string and API key to the POST body.",
+    "result_tags": [
+      "api_integration",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "// Model the exported data from Onyphe DataScan. Creates nodes.\n// Args:\n//   - $data: list of dicts of data from DataScan\n// Yields nodes",
+    "file": "storm/modules/cyl.onyphe.privsep.storm",
+    "chunk_type": "window",
+    "description": "Creates nodes from Onyphe DataScan export data by modeling the exported records.",
+    "result_tags": [
+      "data_ingest",
+      "feed_ingest",
+      "node_creation"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "// Return a node from the input item, creating it if it doesn't already exist.\n// Not all nodes are supported, ?= notation is used to set the value based on the input,\n// the first node that winds up created will be returned. The following forms are supported\n// in this order:\n//\n//      hash:md5\n//      hash:sha1\n//      hash:sha256\n//      inet:cidr4\n//      inet:ipv4\n//      inet:ipv6\n//      inet:fqdn\n//      inet:email\n//      inet:server\n//      inet:url\n//      file:path\n//\n// Because both inet:server and inet:urlfile are supported, and in that order, it is\n// impossible for this function to return an inet:urlfile with the protocol tcp.\n//\n// Args\n//   - $item (str or comp): The item to use as a primary value when creating a node.\n// Returns: The first node created when passing $item to the above forms with ?= notation.",
+    "file": "src/pkgs/lookup-storm/storm/modules/slib.lookup.lib.storm",
+    "chunk_type": "window",
+    "description": "Creates and returns a node from an input item by attempting multiple node form types in order, creating the first matching type if it doesn't already exist.",
+    "result_tags": [
+      "node_creation",
+      "scaffolding",
+      "utility"
+    ],
+    "technique_tags": [
+      "return"
+    ]
+  },
+  {
+    "text": "//      inet:email\n//      inet:server\n//      inet:url\n//      file:path\n//\n// Because both inet:server and inet:urlfile are supported, and in that order, it is\n// impossible for this function to return an inet:urlfile with the protocol tcp.\n//\n// Args\n//   - $item (str or comp): The item to use as a primary value when creating a node.\n// Returns: The first node created when passing $item to the above forms with ?= notation.",
+    "file": "src/pkgs/lookup-storm/storm/modules/slib.lookup.lib.storm",
+    "chunk_type": "window",
+    "description": "This is documentation for a helper function that creates nodes from various input types (email, server, URL, file path) and returns the first node created.",
+    "result_tags": [
+      "node_creation",
+      "scaffolding",
+      "utility"
+    ],
+    "technique_tags": [
+      "return"
+    ]
+  },
+  {
+    "text": "[\n    inet:ipv4=1.1.1.1\n    inet:fqdn=example.com\n    +#test.tag\n]",
+    "file": "tests/storm_test_scripts/simple_script.storm",
+    "chunk_type": "window",
+    "description": "Creates or lifts an IPv4 node and an FQDN node, then applies a test tag to both nodes.",
+    "result_tags": [
+      "node_creation",
+      "tag_assignment"
+    ],
+    "technique_tags": [
+      "node_creation",
+      "tag_filter"
+    ]
+  },
+  {
+    "text": "for ($tag, $value) in $rows {\n    [inet:fqdn=$value +#$tag]\n}",
+    "file": "tests/storm_test_scripts/test.storm",
+    "chunk_type": "for",
+    "description": "Creates or retrieves FQDN nodes and assigns tags to them based on row data.",
+    "result_tags": [
+      "bulk_operation",
+      "domain_enrichment",
+      "node_creation",
+      "tag_assignment"
+    ],
+    "technique_tags": [
+      "for_loop",
+      "node_creation"
+    ]
+  },
+  {
+    "text": "/*\n    aob.otx.domain\n*/\n\ninit {\n    if $cmdopts.debug { $lib.debug = $lib.true }\n    $otx = $lib.import(\"arcane.otx\")\n}\n\nif $node {\n    divert --size $cmdopts.size $cmdopts.yield $otx.enrich_domain($node, $cmdopts.asof)\n}",
+    "file": "storm/commands/aob.otx.domain.storm",
+    "chunk_type": "window",
+    "description": "Enriches domain nodes with threat intelligence data from AlienVault OTX using the arcane.otx library module.",
+    "result_tags": [
+      "cti_triage",
+      "domain_enrichment",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "init_block",
+      "yield"
+    ]
+  },
+  {
+    "text": "/*\n    aob.otx.ip\n*/\n\ninit {\n    if $cmdopts.debug { $lib.debug = $lib.true }\n    $otx = $lib.import(\"arcane.otx\")\n}\n\nif $node {\n    divert --size $cmdopts.size $cmdopts.yield $otx.enrich_ip($node, $cmdopts.asof)\n}",
+    "file": "storm/commands/aob.otx.ip.storm",
+    "chunk_type": "window",
+    "description": "Enriches IP addresses using the Arcane OTX module by fetching threat intelligence data and optionally diverting results based on size parameters.",
+    "result_tags": [
+      "cti_triage",
+      "ip_enrichment",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "init_block",
+      "yield"
+    ]
+  },
+  {
+    "text": "/*\n    Arcane Observatory Alientvault OTX Passive DNS Command.\n*/\n\ninit {\n    if $cmdopts.debug { $lib.debug = $lib.true }\n    $otx = $lib.import(\"arcane.otx\")\n}\n\nif $node {\n    divert --size $cmdopts.size $cmdopts.yield $otx.pdns($node, asof=$cmdopts.asof)\n}",
+    "file": "storm/commands/aob.otx.pdns.storm",
+    "chunk_type": "window",
+    "description": "Queries Alienvault OTX for passive DNS records associated with a given node with optional size and time filtering.",
+    "result_tags": [
+      "cti_triage",
+      "dns_lookup",
+      "network_pivoting",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "init_block",
+      "yield"
+    ]
+  },
+  {
+    "text": "/*\n    Arcane Observatory Alienvault OTX Pulse Command.\n*/\n\ninit {\n    if $cmdopts.debug { $lib.debug = $lib.true }\n    $otx = $lib.import(\"arcane.otx\")\n}\n\ndivert --size $cmdopts.size $cmdopts.yield $otx.pulses(\n    $cmdopts.pulseids,\n    $cmdopts.asof,\n    $cmdopts.iocs,\n    $cmdopts.ioc_limit\n)",
+    "file": "storm/commands/aob.otx.pulses.storm",
+    "chunk_type": "window",
+    "description": "Fetches and ingests Alienvault OTX threat pulses with specified parameters, yielding IOC data in batches.",
+    "result_tags": [
+      "bulk_operation",
+      "cti_triage",
+      "feed_ingest",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "init_block",
+      "yield"
+    ]
+  },
+  {
+    "text": "/*\n    aob.otx.setup.apikey storm command\n*/\n\ninit {\n    if $cmdopts.debug {$lib.debug = $lib.true}\n}\n\n$setup = $lib.import(arcane.otx.setup)\n\nif $cmdopts.self {\n    $lib.print(\"[aob::otx::setup::apikey] Setting Aracne OTX API key for the current user.\")\n}\nelse {\n    $lib.print(\"[aob::otx::setup::apikey] Setting Arcane OTX API key for all users.\")\n}\n\n$setup.set_api_key($cmdopts.apikey, self=$cmdopts.self)",
+    "file": "storm/commands/aob.otx.setup.apikey.storm",
+    "chunk_type": "window",
+    "description": "Configures and stores an Arcane OTX API key for either the current user or all users in the system.",
+    "result_tags": [
+      "api_key_management",
+      "configuration",
+      "utility"
+    ],
+    "technique_tags": [
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "/*\n* otx.setup.tagprefix storm command\n*/\n\ninit {\n    if $cmdopts.debug {$lib.debug = $lib.true}\n}\n\n($ok, $tagname) = $lib.trycast(syn:tag, $cmdopts.tagname)\nif (not $ok) {\n    // sudo insult\n    $lib.exit('[aob::otx::setup::tagprefix] Tag prefix invalid. Do you think like you type?')\n}\n\n$setup = $lib.import(arcane.otx.setup)\n\nif $cmdopts.self {\n    $lib.print(\"[aob::otx::setup::tagprefix] Setting Aracne OTX IOC tag for the current user.\")\n}\nelse {\n    $lib.print(\"[aob::otx::setup::tagprefix] Setting Arcane OTX IOC tag for all users.\")\n}\n\n$setup.set_tag_prefix($cmdopts.tagprefix, self=$cmdopts.self)",
+    "file": "storm/commands/aob.otx.setup.tagprefix.storm",
+    "chunk_type": "window",
+    "description": "Configures the tag prefix for Arcane OTX IOC enrichment, either for the current user or globally across all users.",
+    "result_tags": [
+      "configuration",
+      "tag_assignment",
+      "utility"
+    ],
+    "technique_tags": [
+      "conditional",
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "$setup = $lib.import(arcane.otx.setup)\n\nif $cmdopts.self {\n    $lib.print(\"[aob::otx::setup::tagprefix] Setting Aracne OTX IOC tag for the current user.\")\n}\nelse {\n    $lib.print(\"[aob::otx::setup::tagprefix] Setting Arcane OTX IOC tag for all users.\")\n}\n\n$setup.set_tag_prefix($cmdopts.tagprefix, self=$cmdopts.self)",
+    "file": "storm/commands/aob.otx.setup.tagprefix.storm",
+    "chunk_type": "window",
+    "description": "Configures the tag prefix for Arcane OTX IOC enrichment either for the current user or all users.",
+    "result_tags": [
+      "configuration",
+      "setup",
+      "tag_assignment"
+    ],
+    "technique_tags": [
+      "lib_print"
+    ]
+  },
+  {
+    "text": "/*\n\n    Alienvault OTX whois records are fucking weird. There can be multiple\n    dates with no context. E.g.: multiple creation dates, expiration dates.\n\n    https://otx.alienvault.com/indicator/domain/bbc-news.org\n\n    Using other vendor data going to take the earlier date in the whois\n    results\n*/",
+    "file": "storm/modules/arcane.otx.ingest.storm",
+    "chunk_type": "window",
+    "description": "Comment documenting the handling of inconsistent whois record dates from Alienvault OTX data by selecting the earliest date when multiple dates exist.",
+    "result_tags": [
+      "data_normalization",
+      "documentation",
+      "whois_lookup"
+    ],
+    "technique_tags": [
+      "whois"
+    ]
+  },
+  {
+    "text": "Dependencies:\n    -- Crowdstrike API key.\n    -- No nodes should be inbound when calling this snippet due to the use of for loops.\n*/\n\n// Iterate over each yielded result.",
+    "file": "snippets/crowdstrike-falcon-actors/crowdstrike-falcon-actors.storm",
+    "chunk_type": "window",
+    "description": "This snippet sets up a framework for iterating over Crowdstrike API results with dependency notes about API authentication and node input handling.",
+    "result_tags": [
+      "configuration",
+      "scaffolding",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "$validin = $lib.import(s1.validin)\n\n\ndivert $cmdopts.yield $validin.dns($node, $cmdopts)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-validin\\storm\\commands\\s1.validin.dns.storm",
+    "chunk_type": "window",
+    "description": "Validates DNS data for a node using the s1.validin library and diverts the result based on command options.",
+    "result_tags": [
+      "data_validation",
+      "dns_lookup",
+      "node_enrichment"
+    ],
+    "technique_tags": [
+      "yield"
+    ]
+  },
+  {
+    "text": "$download = $lib.import(s1.validin.download)\n\n\ndivert $cmdopts.yield $download.download($node)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-validin\\storm\\commands\\s1.validin.download.storm",
+    "chunk_type": "window",
+    "description": "Imports a download utility module and executes a download operation on the given node, diverting the output based on command options.",
+    "result_tags": [
+      "data_export",
+      "node_operation",
+      "utility"
+    ],
+    "technique_tags": [
+      "yield"
+    ]
+  },
+  {
+    "text": "init {\n    $privsep = $lib.import(s1.validin.privsep, debug=$lib.debug)\n\n    if $cmdopts.global {\n        $lib.print(\"Setting Validin API key for all users.\")\n    } else {\n        $lib.print(\"Setting Validin API key for the current user.\")\n    }\n\n    $ok = $privsep.set_api_key($cmdopts.apikey, global=$cmdopts.global)\n\n    if $ok {\n        if $lib.debug {$lib.print(\"Validin API key set successfully\")}\n    } else {\n        $lib.warn(\"Failed setting the key for the Validin API. Check if the token you provided is valid.\")\n    }\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-validin\\storm\\commands\\s1.validin.setup.apikey.storm",
+    "chunk_type": "init",
+    "description": "Configures the Validin API key for the current user or globally across all users with validation feedback.",
+    "result_tags": [
+      "api_setup",
+      "configuration",
+      "credential_management"
+    ],
+    "technique_tags": [
+      "init_block",
+      "lib_print",
+      "lib_warn"
+    ]
+  },
+  {
+    "text": "$validin = $lib.import(s1.validin)\n\n\ndivert $cmdopts.yield $validin.whois($node, $cmdopts)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-validin\\storm\\commands\\s1.validin.whois.storm",
+    "chunk_type": "window",
+    "description": "Performs a WHOIS lookup on the current node and yields the results based on command options.",
+    "result_tags": [
+      "data_enrichment",
+      "network_pivoting",
+      "whois_lookup"
+    ],
+    "technique_tags": [
+      "whois",
+      "yield"
+    ]
+  },
+  {
+    "text": "function get_source() {\n    // lift the meta:source or add it if it doesn't exist\n\n    $name = \"validin api\"\n    [meta:source=($name,) :name=$name]\n    return($node)\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-validin\\storm\\modules\\s1.validin.ingest.storm",
+    "chunk_type": "function",
+    "description": "Lifts or creates nodes with a specific meta:source value set to 'validin api' and assigns a name property.",
+    "result_tags": [
+      "node_creation",
+      "tag_assignment",
+      "utility"
+    ],
+    "technique_tags": [
+      "function_def",
+      "node_creation",
+      "return"
+    ]
+  },
+  {
+    "text": "function get_api_key() {\n    // see if the user has their own key set\n    $apikey = $lib.user.vars.get(\"s1:validin:apikey\")\n\n    if $apikey {\n        return($apikey)\n    }\n\n    // no user key, check for global\n    $apikey = $lib.globals.get(\"s1:validin:apikey\")\n\n    if $apikey {\n        return($apikey)\n    }\n \n    return($lib.false)\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-validin\\storm\\modules\\s1.validin.privsep.storm",
+    "chunk_type": "function",
+    "description": "Retrieves an API key from user variables or falls back to global configuration.",
+    "result_tags": [
+      "configuration",
+      "utility"
+    ],
+    "technique_tags": [
+      "function_def",
+      "globals_lookup",
+      "return"
+    ]
+  },
+  {
+    "text": "/*\nSet the TLPBlack keys (global only)\n*/\n\n$admin = $lib.import(s1.tlpblack.privsep.admin)\n$admin.set_global_apikey($cmdopts.apikey)\n$admin.set_global_username($cmdopts.username)\n$admin.set_global_password($cmdopts.password)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-tlpblack\\storm\\commands\\s1.tlpblack.setup.keys.storm",
+    "chunk_type": "window",
+    "description": "Sets global API credentials (API key, username, and password) for TLP Black privileged separation admin access.",
+    "result_tags": [
+      "configuration",
+      "credential_management",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "function __base64_creds() {\n    // format credentials for basic auth\n\n    $user = $lib.globals.get('s1:tlpblack:username')\n    $pass = $lib.globals.get('s1:tlpblack:password')\n    $auth = `{$user}:{$pass}`\n\n    return($lib.base64.encode($auth.encode()))\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-tlpblack\\storm\\modules\\s1.tlpblack.privsep.storm",
+    "chunk_type": "function",
+    "description": "Encodes credentials for basic authentication by retrieving stored username and password from globals and base64 encoding them.",
+    "result_tags": [
+      "configuration",
+      "credential_handling",
+      "utility"
+    ],
+    "technique_tags": [
+      "function_def",
+      "globals_lookup",
+      "return"
+    ]
+  },
+  {
+    "text": "// Helper: getLevelForTag\n// Given a tag name, returns the corresponding it:sec:tlp string value.\n// Returns $lib.null if invalid.\n// ---------------------------------------------------------------------------",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-tlp-manager\\storm\\modules\\s1.tlp.config.storm",
+    "chunk_type": "window",
+    "description": "Helper function that maps a tag name to its corresponding TLP (Traffic Light Protocol) security level value.",
+    "result_tags": [
+      "tag_filtering",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "// S1 TLP Manager — Reporters Module\n// Console and Slack reporting for TLP audit results.\n\n// ---------------------------------------------------------------------------\n// printAuditReport\n// Prints a formatted console report from audit data.\n// Args:\n//   $auditData - dict with keys: distribution, byForm, orphans, timestamp\n// ---------------------------------------------------------------------------",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-tlp-manager\\storm\\modules\\s1.tlp.reporters.storm",
+    "chunk_type": "window",
+    "description": "Prints a formatted console report displaying TLP audit results including distribution, form breakdown, orphans, and timestamp.",
+    "result_tags": [
+      "data_export",
+      "reporting",
+      "tlp_audit"
+    ],
+    "technique_tags": [
+      "slack"
+    ]
+  },
+  {
+    "text": "// ---------------------------------------------------------------------------\n// sendSlackAudit\n// Sends a Slack Block Kit notification with the audit report.\n// Args:\n//   $auditData  - dict from the audit command\n//   $opticUrl   - base Optic URL for deep links\n//   $webhookUrl - resolved Slack webhook URL\n//   $debug      - bool for verbose output\n// Returns: dict { sent: bool, message: str }\n// ---------------------------------------------------------------------------",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-tlp-manager\\storm\\modules\\s1.tlp.reporters.storm",
+    "chunk_type": "window",
+    "description": "Sends a Slack notification with a formatted audit report using Block Kit formatting.",
+    "result_tags": [
+      "alerting",
+      "reporting",
+      "slack_notification"
+    ],
+    "technique_tags": [
+      "slack"
+    ]
+  },
+  {
+    "text": "/*\nUtility functions for S1 Threat Intelligence Notifier.\n\nProvides helper functions for tag filtering, URL building, and data processing.\n*/",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-threatintel-notifier\\storm\\modules\\s1.threatintel.notifier.utils.storm",
+    "chunk_type": "window",
+    "description": "This is a utility module header defining helper functions for S1 threat intelligence notification system, including tag filtering, URL building, and data processing.",
+    "result_tags": [
+      "scaffolding",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "$api = $lib.import(s1.threatfox.api, debug=$lib.debug)\n$ingest = $lib.import(s1.threatfox.ingest, debug=$lib.debug)\n\n$data = $api.enrichIndicator($node.repr())\n\nif $data {\n    divert $cmdopts.yield $ingest.parseIndicators($data, $cmdopts.no_refs)\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-threatfox\\storm\\commands\\s1.threatfox.enrich.storm",
+    "chunk_type": "window",
+    "description": "Enriches an indicator using the ThreatFox API and ingests the returned data into the graph.",
+    "result_tags": [
+      "cti_triage",
+      "feed_ingest",
+      "node_creation",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "yield"
+    ]
+  },
+  {
+    "text": "$api = $lib.import(s1.threatfox.api, debug=$lib.debug)\n$ingest = $lib.import(s1.threatfox.ingest, debug=$lib.debug)\n\n$data = $api.fetchIndicators($cmdopts.days_back)\n\nif $data {\n    divert $cmdopts.yield $ingest.parseIndicators($data, no_refs=$cmdopts.no_refs)\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-threatfox\\storm\\commands\\s1.threatfox.ingest.indicators.storm",
+    "chunk_type": "window",
+    "description": "Fetches threat indicators from ThreatFox API for a specified number of days and ingests them into the graph.",
+    "result_tags": [
+      "cti_triage",
+      "feed_ingest",
+      "node_creation",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "yield"
+    ]
+  },
+  {
+    "text": "$api = $lib.import(s1.threatfox.api, debug=$lib.debug)\n$ingest = $lib.import(s1.threatfox.ingest, debug=$lib.debug)\n\n$data = $api.fetchMalwareProfiles()\n\nif $data {\n    divert $cmdopts.yield $ingest.parseMalwareProfiles($data)\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-threatfox\\storm\\commands\\s1.threatfox.ingest.malware.storm",
+    "chunk_type": "window",
+    "description": "Fetches malware profiles from ThreatFox API and ingests the parsed results.",
+    "result_tags": [
+      "cti_triage",
+      "data_export",
+      "feed_ingest",
+      "malware_analysis"
+    ],
+    "technique_tags": [
+      "yield"
+    ]
+  },
+  {
+    "text": "$stairwell = $lib.import(\"s1.stairwell\")\n\nif ($cmdopts.init) {\n    if ($node.form() != $lib.null) {\n        $lib.raise(\"InputError\", \"Run --init without input node.\")\n    }\n    divert $cmdopts.yield $stairwell.initialize_env()\n} else {\n    if ($node.form() != \"meta:feed\") {\n        $lib.raise(\"InputError\", \"This command can only be run on a meta:feed.\")\n    }\n    divert $cmdopts.yield $stairwell.env($node, $cmdopts)\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-stairwell\\storm\\commands\\s1.stairwell.env.storm",
+    "chunk_type": "window",
+    "description": "Initializes a Stairwell environment or processes a meta:feed node with Stairwell configuration options.",
+    "result_tags": [
+      "configuration",
+      "feed_ingest",
+      "node_creation"
+    ],
+    "technique_tags": [
+      "conditional",
+      "yield"
+    ]
+  },
+  {
+    "text": "function _validate(bucket, key, obj) {\n    // Check if required bucket\n    $allowed_buckets = $modconf.allowed_buckets\n    if ($allowed_buckets and not $allowed_buckets.has($bucket)) {\n        $lib.raise('INVALID_BUCKET', `Bucket not allowed: {$bucket}`)\n    }\n\n    // Check key prefix\n    $required_prefix = $modconf.required_prefix\n    if ($required_prefix and not $key.startswith($required_prefix)) {\n        $lib.raise('INVALID_PREFIX', `Key must start with prefix: {$required_prefix}`)\n    }\n\n    // Check payload size\n    $max_bytes = $modconf.max_bytes\n    $serialized = $lib.json.save($obj)\n    if ($serialized.size() > $max_bytes) {\n        $lib.raise('PAYLOAD_EXCEEDS_MAX_BYTES', `Payload exceeds max_bytes {$max_bytes}`)\n    }\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-s3\\synmods\\s3\\assets\\storm\\modules\\s1.s3.storm",
+    "chunk_type": "function",
+    "description": "Validates storage operations by checking bucket permissions, key prefix requirements, and payload size limits against module configuration.",
+    "result_tags": [
+      "configuration",
+      "utility",
+      "validation"
+    ],
+    "technique_tags": [
+      "conditional",
+      "function_def",
+      "json_ops"
+    ]
+  },
+  {
+    "text": "// check for existence of threat actor and malware family tags\n$actors = ()\n{-> # +syn:tag^=rep. -> risk:threat:tag -#omit | limit 1 | $actors.append(:tag)}\n$malware = ()\n{-> # +syn:tag^=rep. -> risk:tool:software:tag -#omit | limit 1 | $malware.append(:tag)}\n\n// ignore iocs that have already been tasked",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-hunting\\storm\\commands\\s1.wayfinder.task.storm",
+    "chunk_type": "window",
+    "description": "Retrieves threat actor and malware family tags from nodes with reputation tags, filtering for specific risk classifications.",
+    "result_tags": [
+      "actor_tracking",
+      "malware_analysis",
+      "tag_filtering",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "limit",
+      "pivoting",
+      "tag_filter"
+    ]
+  },
+  {
+    "text": "function actor_json(input) {\n    // create export json for a threat actor\n\n    yield $input\n\n    $output = ({\n        \"tag\": :tag,\n        \"name\": (:org:name).upper()\n    })\n\n    if :desc {\n        $output.description = :desc\n    }\n\n    if :_s1:gti:updated {\n        $output.last_updated = :_s1:gti:updated\n    }\n\n    if :active {\n        $output.firstseen = (:active).0\n        $output.lastseen = (:active).1\n    }\n\n    if :org:names {\n        $output.aliases = :org:names\n    }\n\n    if :country:code {\n        $output.location = :country:code\n    } elif :country {\n        $output.location = :country::iso2\n    }\n\n    $motivations = ([])\n    {:goals -> ou:goal if :name {$motivations.append(:name)}}\n\n    if $motivations {\n        $output.motivations = $motivations\n    }\n\n    $countries = ([])\n    {-(targets)> pol:country if :iso2 {$countries.append(:iso2)}}\n\n    if $countries {\n        $output.countries = $countries\n    }\n\n    $industries = ([])\n    {-(targets)> ou:industry if :name {$industries.append(:name)}}\n\n    if $industries {\n        $output.industries = $industries\n    }\n\n    $malware = ([])\n    {-(uses)> risk:tool:software if :tag {$malware.append(:tag)}}\n\n    if $malware {\n        $output.malware = $malware\n    }\n\n    return($output)\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-hunting\\storm\\modules\\s1.wayfinder.export.storm",
+    "chunk_type": "function",
+    "description": "Transforms threat actor nodes into structured JSON export format with enriched data including motivations, targeted countries, industries, and associated malware.",
+    "result_tags": [
+      "actor_tracking",
+      "cti_triage",
+      "data_export",
+      "reporting"
+    ],
+    "technique_tags": [
+      "function_def",
+      "pivoting",
+      "return",
+      "yield"
+    ]
+  },
+  {
+    "text": "$output = ({\n        \"tag\": :tag,\n        \"name\": (:soft:name).upper()\n    })\n\n    if :desc {\n        $output.description = :desc\n    }\n\n    if :_s1:gti:os {\n        $output.os = :_s1:gti:os\n    }\n\n    if :type {\n        $output.role = $node.repr(type)\n    }\n\n    if :soft:names {\n        $output.aliases = :soft:names\n    }\n\n    $malware = ([])\n    {-(refs)> risk:tool:software if :tag {$malware.append(:tag)}}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-hunting\\storm\\modules\\s1.wayfinder.export.storm",
+    "chunk_type": "window",
+    "description": "Constructs a structured output object with software/malware metadata including name, OS, role, and aliases, then collects related risk tool software tags into a list.",
+    "result_tags": [
+      "data_export",
+      "malware_analysis",
+      "node_creation",
+      "tag_filtering"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "$actors = $lib.import(s1.gti.actors)\n\n\ndivert $cmdopts.yield $actors.threat_actors(\n    iocs=$cmdopts.iocs,\n    malware=$cmdopts.malware,\n    since=$cmdopts.since,\n    since_last=$cmdopts.since_last\n)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-gti\\storm\\commands\\s1.gti.actors.storm",
+    "chunk_type": "window",
+    "description": "Queries threat actors from the GTI actors module filtered by IOCs, malware, and time parameters, then outputs the results.",
+    "result_tags": [
+      "actor_tracking",
+      "cti_triage",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "yield"
+    ]
+  },
+  {
+    "text": "$campaigns = $lib.import(s1.gti.campaigns)\n\n\ndivert $cmdopts.yield $campaigns.campaigns(\n    iocs=$cmdopts.iocs,\n    since=$cmdopts.since,\n    since_last=$cmdopts.since_last,\n)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-gti\\storm\\commands\\s1.gti.campaigns.storm",
+    "chunk_type": "window",
+    "description": "Imports a campaigns library and queries campaign data filtered by IOCs and time parameters, with optional yield diversion.",
+    "result_tags": [
+      "cti_triage",
+      "data_export",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "yield"
+    ]
+  },
+  {
+    "text": "$enrich = $lib.import(s1.gti.enrich)\n\n\ndivert $cmdopts.yield $enrich.enrich($node)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-gti\\storm\\commands\\s1.gti.enrich.storm",
+    "chunk_type": "window",
+    "description": "Enriches the current node using the GTI (Synapse' threat intelligence) enrichment library and diverts the output based on command options.",
+    "result_tags": [
+      "cti_triage",
+      "node_enrichment",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "yield"
+    ]
+  },
+  {
+    "text": "$malware = $lib.import(s1.gti.malware)\n\n\ndivert $cmdopts.yield $malware.malware_families(\n    iocs=$cmdopts.iocs,\n    malware=$cmdopts.malware,\n    since=$cmdopts.since,\n    since_last=$cmdopts.since_last,\n    yara=$cmdopts.yara\n)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-gti\\storm\\commands\\s1.gti.malware.storm",
+    "chunk_type": "window",
+    "description": "Queries the S1 GTI malware library to retrieve malware family information filtered by IOCs, malware names, time ranges, and YARA rules.",
+    "result_tags": [
+      "cti_triage",
+      "data_export",
+      "malware_analysis",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "yield"
+    ]
+  },
+  {
+    "text": "$reports = $lib.import(s1.gti.reports)\n\n\ndivert $cmdopts.yield $reports.reports(\n    iocs=$cmdopts.iocs,\n    since=$cmdopts.since,\n    since_last=$cmdopts.since_last,\n    yara=$cmdopts.yara\n)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-gti\\storm\\commands\\s1.gti.reports.storm",
+    "chunk_type": "window",
+    "description": "Imports a GTI reports library and retrieves threat reports based on IoCs, time filters, and YARA rules.",
+    "result_tags": [
+      "cti_triage",
+      "reporting",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "yield"
+    ]
+  },
+  {
+    "text": "function get_source() {\n    // lift the meta:source or add it if it doesn't exist\n\n    $name = \"gti api\"\n    [meta:source=($name,) :name=$name]\n    return($node)\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-gti\\storm\\modules\\s1.gti.ingest.storm",
+    "chunk_type": "function",
+    "description": "Lifts or creates a meta:source node with the name 'gti api' and returns the node.",
+    "result_tags": [
+      "meta_enrichment",
+      "node_creation",
+      "utility"
+    ],
+    "technique_tags": [
+      "function_def",
+      "node_creation",
+      "return"
+    ]
+  },
+  {
+    "text": "function set_malware_last() {\n    // set the last completed run date for s1.gti.malware\n\n    $lib.globals.set(\"s1:gti:malware:last\", $lib.time.now())\n}\n\n\nfunction get_reports_last() {\n    // get the last completed run date for s1.gti.reports\n\n    return($lib.globals.get(\"s1:gti:reports:last\"))\n}\n\n\nfunction set_reports_last() {\n    // set the last completed run date for s1.gti.reports\n\n    $lib.globals.set(\"s1:gti:reports:last\", $lib.time.now())\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-gti\\storm\\modules\\s1.gti.privsep.storm",
+    "chunk_type": "window",
+    "description": "Manages timestamp tracking for SentinelOne GTI malware and reports feed ingestion cycles.",
+    "result_tags": [
+      "configuration",
+      "feed_ingest",
+      "utility"
+    ],
+    "technique_tags": [
+      "function_def",
+      "globals_lookup",
+      "globals_set",
+      "return",
+      "time_ops"
+    ]
+  },
+  {
+    "text": "function set_reports_last() {\n    // set the last completed run date for s1.gti.reports\n\n    $lib.globals.set(\"s1:gti:reports:last\", $lib.time.now())\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-gti\\storm\\modules\\s1.gti.privsep.storm",
+    "chunk_type": "window",
+    "description": "Sets a global variable to track the last completion time for S1 GTI reports.",
+    "result_tags": [
+      "configuration",
+      "utility"
+    ],
+    "technique_tags": [
+      "function_def",
+      "globals_set",
+      "time_ops"
+    ]
+  },
+  {
+    "text": "// SentinelOne-focused — exact phrases to avoid matching \"sentinelone\" and\n    // \"bypass\" as independent words scattered across unrelated content.\n    \"\\\"sentinelone bypass\\\"\",\n    \"\\\"sentinelone evasion\\\"\",\n    \"\\\"sentinelone edr bypass\\\"\",\n    \"\\\"sentinelone edr evasion\\\"\",\n\n    // Competitor vendor-targeted — exact phrases for precision\n    \"\\\"crowdstrike bypass\\\"\",\n    \"\\\"crowdstrike evasion\\\"\",\n    \"\\\"defender edr bypass\\\"\",\n    \"\\\"carbon black bypass\\\"\",\n    \"\\\"cortex xdr bypass\\\"\",\n\n    // Technique-specific — exact phrases where word adjacency matters\n    \"\\\"EDR bypass\\\"\",\n    \"\\\"EDR killer\\\"\",\n\n    // BYOVD / vulnerable driver (high-priority threat vector)\n    \"\\\"BYOVD\\\"\",\n    //\"\\\"vulnerable driver\\\"\",\n\n    // Adjacent techniques — exact phrases to avoid loose word matching\n    // \"\\\"AMSI bypass\\\"\",\n    // \"\\\"shellcode loader\\\"\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "EDR vendor-specific bypass search phrase list used to hunt offensive security repos.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "malware_analysis",
+      "threat_hunting"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"\\\"cortex xdr bypass\\\"\",\n\n    // Technique-specific — exact phrases where word adjacency matters\n    \"\\\"EDR bypass\\\"\",\n    \"\\\"EDR killer\\\"\",\n\n    // BYOVD / vulnerable driver (high-priority threat vector)\n    \"\\\"BYOVD\\\"\",\n    //\"\\\"vulnerable driver\\\"\",\n\n    // Adjacent techniques — exact phrases to avoid loose word matching\n    // \"\\\"AMSI bypass\\\"\",\n    // \"\\\"shellcode loader\\\"\",\n    // \"\\\"LSASS dump\\\"\",\n\n\n    // CJK / multilingual — exact phrases in Chinese, Korean, Japanese used\n    // in offensive security repos. GitHub Search API supports Unicode.\n    \"\\\"免杀\\\"\",\n    \"\\\"免杀对抗\\\"\",\n    \"\\\"漏洞驱动\\\"\",\n    \"\\\"远控源码\\\"\",\n    \"\\\"银狐远控\\\"\",\n    \"\\\"毒药远程控制\\\"\",\n    \"\\\"EDR 绕过\\\"\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "EDR and BYOVD technique-specific search phrases including CJK multilingual terms for offensive repo discovery.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "malware_analysis",
+      "threat_hunting"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "// \"\\\"shellcode loader\\\"\",\n    // \"\\\"LSASS dump\\\"\",\n\n\n    // CJK / multilingual — exact phrases in Chinese, Korean, Japanese used\n    // in offensive security repos. GitHub Search API supports Unicode.\n    \"\\\"免杀\\\"\",\n    \"\\\"免杀对抗\\\"\",\n    \"\\\"漏洞驱动\\\"\",\n    \"\\\"远控源码\\\"\",\n    \"\\\"银狐远控\\\"\",\n    \"\\\"毒药远程控制\\\"\",\n    \"\\\"EDR 绕过\\\"\",\n    \"\\\"杀软对抗\\\"\",\n    \"\\\"驱动利用\\\"\",\n\n    // Russian — offensive security terms from RU threat actor repos\n    \"\\\"обход EDR\\\"\",\n    \"\\\"обход антивируса\\\"\",\n    \"\\\"уязвимый драйвер\\\"\",\n    \"\\\"эксплуатация драйвера\\\"\",\n    \"\\\"отключение EDR\\\"\",\n    \"\\\"удалённое управление\\\"\",\n    \"\\\"обход детекта\\\"\",\n    \"\\\"фуд\\\"\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Commented and CJK/Russian multilingual offensive security search terms for EDR evasion repo discovery.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "malware_analysis",
+      "threat_hunting"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"https://github.com/boku7/AsmHalosGate\",\n    \"https://github.com/wavestone-cdt/EDRSandblast\",\n    \"https://github.com/myzxcg/RealBlindingEDR\",\n    \"https://github.com/senzee1984/EDRPrison\",\n    \"https://github.com/netero1010/EDRSilencer\",\n    \"https://github.com/0xJs/BlockEDRTraffic\",\n    \"https://github.com/ZeroMemoryEx/Blackout\",\n    \"https://github.com/keowu/BadRentdrv2\",\n    \"https://github.com/MaorSabag/TrueSightKiller\",\n    \"https://github.com/ZeroMemoryEx/Terminator\",\n    \"https://github.com/BlackSnufkin/BYOVD\",\n    \"https://github.com/gmh5225/Driver-imxyviMapper\",\n    \"https://github.com/ph4nt0mbyt3/Darkside\",\n    \"https://github.com/TheCruZ/kdmapper\",\n    \"https://github.com/BlackSnufkin/GhostDriver\",\n    \"https://github.com/Idov31/Nidhogg\",\n    \"https://github.com/0xHossam/Killer\",\n    \"https://github.com/EvilBytecode/EDR-XDR-AV-Killer\",\n    \"https://github.com/xM0kht4r/AV-EDR-Killer\",\n    \"https://github.com/j3h4ck/WatchDogKiller\",\n    \"https://github.com/7h3w4lk3r/Kill-Floor\",\n    \"https://github.com/gd-discov3r/AV-KILLER\",\n    \"https://github.com/ddostest123/KernelAVKiller\",\n    \"https://github.com/EvilWhales/CFSKiller\",\n    \"https://github.com/APT64/KernelAVKiller\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "List of GitHub repositories implementing EDR bypass, blinding, and silencing tools for BYOVD detection tracking.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "feed_ingest",
+      "threat_hunting"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"https://github.com/ph4nt0mbyt3/Darkside\",\n    \"https://github.com/TheCruZ/kdmapper\",\n    \"https://github.com/BlackSnufkin/GhostDriver\",\n    \"https://github.com/Idov31/Nidhogg\",\n    \"https://github.com/0xHossam/Killer\",\n    \"https://github.com/EvilBytecode/EDR-XDR-AV-Killer\",\n    \"https://github.com/xM0kht4r/AV-EDR-Killer\",\n    \"https://github.com/j3h4ck/WatchDogKiller\",\n    \"https://github.com/7h3w4lk3r/Kill-Floor\",\n    \"https://github.com/gd-discov3r/AV-KILLER\",\n    \"https://github.com/ddostest123/KernelAVKiller\",\n    \"https://github.com/EvilWhales/CFSKiller\",\n    \"https://github.com/APT64/KernelAVKiller\",\n    \"https://github.com/shakenetwork/AV-Killer\",\n    \"https://github.com/B4hamut/eschaton\",\n    \"https://github.com/Yaxser/Backstab\",\n    \"https://github.com/antianalysis/AV-Killer\",\n    \"https://github.com/oxfemale/av-edr-kill\",\n    \"https://github.com/Ryze-T/EdrKiller\",\n    \"https://github.com/ThanniKudam/TopazTerminator\",\n    \"https://github.com/vvswift/Bypass-Protection0x00\",\n    \"https://github.com/SaadAhla/UnhookingPatch\",\n    \"https://github.com/zer0condition/mhydeath\",\n    \"https://github.com/Mr-Un1k0d3r/RedTeamCCode\",\n    \"https://github.com/oldkingcone/BYOSI\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "List of GitHub repositories for BYOVD/EDR killer, AV killer, and kernel driver exploit tools.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "feed_ingest",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"https://github.com/APT64/KernelAVKiller\",\n    \"https://github.com/shakenetwork/AV-Killer\",\n    \"https://github.com/B4hamut/eschaton\",\n    \"https://github.com/Yaxser/Backstab\",\n    \"https://github.com/antianalysis/AV-Killer\",\n    \"https://github.com/oxfemale/av-edr-kill\",\n    \"https://github.com/Ryze-T/EdrKiller\",\n    \"https://github.com/ThanniKudam/TopazTerminator\",\n    \"https://github.com/vvswift/Bypass-Protection0x00\",\n    \"https://github.com/SaadAhla/UnhookingPatch\",\n    \"https://github.com/zer0condition/mhydeath\",\n    \"https://github.com/Mr-Un1k0d3r/RedTeamCCode\",\n    \"https://github.com/oldkingcone/BYOSI\",\n    \"https://github.com/MalwareSupportGroup/PolyDrop\",\n    \"https://github.com/S3cur3Th1sSh1t/Ruy-Lopez\",\n    \"https://github.com/tkmru/awesome-edr-bypass\",\n    \"https://github.com/CyberSecurityUP/Awesome-EDR-Evasion\",\n    \"https://github.com/Helixo32/NimBlackout\",\n    \"https://github.com/AlexDev08/awesome-edr-bypass\",\n    \"https://github.com/shovon58/awesome-edr-bypass-data\",\n    \"https://github.com/david3c2004/CLR-Unhook\",\n    // --- Added from GitHub tracker review (2026-04-21) ---\n    // BYOVD/Driver\n    \"https://github.com/250wuyifan/BYOVD-KillProcess\",\n    \"https://github.com/2BCEB1/HWAudioOs2Ec-Killer_PoC\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Continuation of GitHub AV/EDR killer and EDR evasion repository list for threat tracking.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "feed_ingest",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"https://github.com/oldkingcone/BYOSI\",\n    \"https://github.com/MalwareSupportGroup/PolyDrop\",\n    \"https://github.com/S3cur3Th1sSh1t/Ruy-Lopez\",\n    \"https://github.com/tkmru/awesome-edr-bypass\",\n    \"https://github.com/CyberSecurityUP/Awesome-EDR-Evasion\",\n    \"https://github.com/Helixo32/NimBlackout\",\n    \"https://github.com/AlexDev08/awesome-edr-bypass\",\n    \"https://github.com/shovon58/awesome-edr-bypass-data\",\n    \"https://github.com/david3c2004/CLR-Unhook\",\n    // --- Added from GitHub tracker review (2026-04-21) ---\n    // BYOVD/Driver\n    \"https://github.com/250wuyifan/BYOVD-KillProcess\",\n    \"https://github.com/2BCEB1/HWAudioOs2Ec-Killer_PoC\",\n    \"https://github.com/ANYLNK/NSecSoftBYOVD\",\n    \"https://github.com/ANYLNK/STProcessMonitorBYOVD\",\n    \"https://github.com/CDipper/BYOVD\",\n    \"https://github.com/chmod760/BYOVD_K7RKScan\",\n    \"https://github.com/DeathShotXD/0xKern3lCrush-Foreverday-BYOVD-CVE-2026-0828\",\n    \"https://github.com/ghostbyt3/BYOVD-POC\",\n    \"https://github.com/IamVanLord/NSecSoftBYOVD\",\n    \"https://github.com/JodisKripe/BYOVD\",\n    \"https://github.com/KOSEC-LLC/BYOVD-Research\",\n    \"https://github.com/LemonSec/BYOVD_detection_framework\",\n    \"https://github.com/nuzydev/BYOVD-DSE-Bypass\",\n    \"https://github.com/PepejHa4ker/byovd\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "GitHub repos for BYOVD, EDR evasion, and awesome-edr-bypass collections used in threat hunting.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "feed_ingest",
+      "threat_hunting"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"https://github.com/2BCEB1/HWAudioOs2Ec-Killer_PoC\",\n    \"https://github.com/ANYLNK/NSecSoftBYOVD\",\n    \"https://github.com/ANYLNK/STProcessMonitorBYOVD\",\n    \"https://github.com/CDipper/BYOVD\",\n    \"https://github.com/chmod760/BYOVD_K7RKScan\",\n    \"https://github.com/DeathShotXD/0xKern3lCrush-Foreverday-BYOVD-CVE-2026-0828\",\n    \"https://github.com/ghostbyt3/BYOVD-POC\",\n    \"https://github.com/IamVanLord/NSecSoftBYOVD\",\n    \"https://github.com/JodisKripe/BYOVD\",\n    \"https://github.com/KOSEC-LLC/BYOVD-Research\",\n    \"https://github.com/LemonSec/BYOVD_detection_framework\",\n    \"https://github.com/nuzydev/BYOVD-DSE-Bypass\",\n    \"https://github.com/PepejHa4ker/byovd\",\n    \"https://github.com/seraphsec/byovd\",\n    \"https://github.com/sekayamarienewsome-spec/BYOVD-Forensic-Analysis-2026\",\n    \"https://github.com/Shalombergman/byovd-service\",\n    \"https://github.com/thebringerofdeath789/BYOVD-POC\",\n    \"https://github.com/victoni/BYOVD-CVE-2023-52271-POC\",\n    \"https://github.com/yudishbeeharry/BYOVDResearch\",\n    \"https://github.com/d4miansec/Reynolds-Ransomware-BYOVD-Driver-Analysis\",\n    \"https://github.com/wutang700/STProcessMonitorBYOVD\",\n    \"https://github.com/nullcharb/BYOYD_YT\",\n    \"https://github.com/pwnfuzz/byovd-watchdog\",\n    \"https://github.com/Zephyr236/BYOVD-hunting-agent\",\n    \"https://github.com/alex3O/BYOVD-DriverKiller\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "GitHub BYOVD proof-of-concept repository list for vulnerable driver tracking and detection.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "feed_ingest",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"https://github.com/PepejHa4ker/byovd\",\n    \"https://github.com/seraphsec/byovd\",\n    \"https://github.com/sekayamarienewsome-spec/BYOVD-Forensic-Analysis-2026\",\n    \"https://github.com/Shalombergman/byovd-service\",\n    \"https://github.com/thebringerofdeath789/BYOVD-POC\",\n    \"https://github.com/victoni/BYOVD-CVE-2023-52271-POC\",\n    \"https://github.com/yudishbeeharry/BYOVDResearch\",\n    \"https://github.com/d4miansec/Reynolds-Ransomware-BYOVD-Driver-Analysis\",\n    \"https://github.com/wutang700/STProcessMonitorBYOVD\",\n    \"https://github.com/nullcharb/BYOYD_YT\",\n    \"https://github.com/pwnfuzz/byovd-watchdog\",\n    \"https://github.com/Zephyr236/BYOVD-hunting-agent\",\n    \"https://github.com/alex3O/BYOVD-DriverKiller\",\n    \"https://github.com/jakydibe/BYOKSH\",\n    \"https://github.com/terribledactyl/silver-fox-byovd-hunts\",\n    \"https://github.com/devianntsec/CVE-2024-51324-BYOVD-Masters-Thesis\",\n    // EDR Killer/Evasion\n    \"https://github.com/DONKEY0xSHOT/EDRLast\",\n    \"https://github.com/D3fD3c0y/EDR-Evasion\",\n    \"https://github.com/FzRsLLaSheR/EBKiller\",\n    \"https://github.com/rivaldofwijaya/Pembeku-EDR\",\n    \"https://github.com/TwoSevenOneT/EDR-Freeze\",\n    \"https://github.com/JoasASantos/Awesome-EDR-Evasion\",\n    \"https://github.com/cyb3rHawk/DEATHCON-2025-Cyb3rhawk-Deconstructing-the-EDR-Evasion-Mille-Feuille-\",\n    \"https://github.com/ybdt/evasion-hub\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Additional BYOVD and kernel exploit PoC GitHub repos for vulnerable driver corpus maintenance.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "feed_ingest",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"https://github.com/alex3O/BYOVD-DriverKiller\",\n    \"https://github.com/jakydibe/BYOKSH\",\n    \"https://github.com/terribledactyl/silver-fox-byovd-hunts\",\n    \"https://github.com/devianntsec/CVE-2024-51324-BYOVD-Masters-Thesis\",\n    // EDR Killer/Evasion\n    \"https://github.com/DONKEY0xSHOT/EDRLast\",\n    \"https://github.com/D3fD3c0y/EDR-Evasion\",\n    \"https://github.com/FzRsLLaSheR/EBKiller\",\n    \"https://github.com/rivaldofwijaya/Pembeku-EDR\",\n    \"https://github.com/TwoSevenOneT/EDR-Freeze\",\n    \"https://github.com/JoasASantos/Awesome-EDR-Evasion\",\n    \"https://github.com/cyb3rHawk/DEATHCON-2025-Cyb3rhawk-Deconstructing-the-EDR-Evasion-Mille-Feuille-\",\n    \"https://github.com/ybdt/evasion-hub\",\n    \"https://github.com/srackalica/GEDR\",\n    \"https://github.com/Gorstak-Zadar/GEDR\",\n    \"https://github.com/Gorstak-Zadar/DriverWatcher\",\n    // Kernel/Driver\n    \"https://github.com/slep2-0/WindowsRootkit\",\n    \"https://github.com/TheMalwareGuardian/Rootkits-Development-Starter-Pack\",\n    \"https://github.com/TheMalwareGuardian/Bootkits-Development-Starter-Pack\",\n    \"https://github.com/0xDbgMan/Kernel-Exploitation\",\n    \"https://github.com/qiuqiqiuqid/KernelKiller\",\n    \"https://github.com/KeServiceDescriptorTable/vulnerable-drivers\",\n    \"https://github.com/sai2fast/Vulnerable-Monitors\",\n    \"https://github.com/sai2fast/driverscloud-rw\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "BYOVD driver killer and EDR evasion GitHub repo list for threat intelligence tracking.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "feed_ingest",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"https://github.com/ybdt/evasion-hub\",\n    \"https://github.com/srackalica/GEDR\",\n    \"https://github.com/Gorstak-Zadar/GEDR\",\n    \"https://github.com/Gorstak-Zadar/DriverWatcher\",\n    // Kernel/Driver\n    \"https://github.com/slep2-0/WindowsRootkit\",\n    \"https://github.com/TheMalwareGuardian/Rootkits-Development-Starter-Pack\",\n    \"https://github.com/TheMalwareGuardian/Bootkits-Development-Starter-Pack\",\n    \"https://github.com/0xDbgMan/Kernel-Exploitation\",\n    \"https://github.com/qiuqiqiuqid/KernelKiller\",\n    \"https://github.com/KeServiceDescriptorTable/vulnerable-drivers\",\n    \"https://github.com/sai2fast/Vulnerable-Monitors\",\n    \"https://github.com/sai2fast/driverscloud-rw\",\n    \"https://github.com/sai2fast/DsArk64\",\n    \"https://github.com/sai2fast/kdhacker64\",\n    \"https://github.com/splintersfury/DriverAtlas\",\n    \"https://github.com/splintersfury/KernelSight\",\n    \"https://github.com/volume19/driver-hunter\",\n    \"https://github.com/Tenaka/lolDrivers\",\n    \"https://github.com/didntchooseaname/loldrivers-database\",\n    \"https://github.com/CaledoniaProject/drivers-binaries\",\n    \"https://github.com/wuwowuren/XDriverLoaderGUI\",\n    \"https://github.com/thomaswantstobeaskeleton/kernel-driver-example-and-research\",\n    \"https://github.com/Drootkit/WinBaseMonitor\",\n    \"https://github.com/eren717/Specter\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "EDR evasion, rootkit, and kernel exploitation GitHub repo list for BYOVD detection corpus.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "feed_ingest",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"https://github.com/sai2fast/driverscloud-rw\",\n    \"https://github.com/sai2fast/DsArk64\",\n    \"https://github.com/sai2fast/kdhacker64\",\n    \"https://github.com/splintersfury/DriverAtlas\",\n    \"https://github.com/splintersfury/KernelSight\",\n    \"https://github.com/volume19/driver-hunter\",\n    \"https://github.com/Tenaka/lolDrivers\",\n    \"https://github.com/didntchooseaname/loldrivers-database\",\n    \"https://github.com/CaledoniaProject/drivers-binaries\",\n    \"https://github.com/wuwowuren/XDriverLoaderGUI\",\n    \"https://github.com/thomaswantstobeaskeleton/kernel-driver-example-and-research\",\n    \"https://github.com/Drootkit/WinBaseMonitor\",\n    \"https://github.com/eren717/Specter\",\n    \"https://github.com/eren717/WdFilter2\",\n    \"https://github.com/quokka728/TheiaPg\",\n    \"https://github.com/rahul0xkr/gdrv-arbitrary-rw-lpe\",\n    \"https://github.com/b3s3da/TcnPeripheral64_PoC\",\n    \"https://github.com/416rehman/DeepZero\",\n    // Killer/Exploit\n    \"https://github.com/3xploit666/WatchDog_Killer\",\n    \"https://github.com/j3h4ck/PoisonKiller\",\n    \"https://github.com/j3h4ck/UnknownKiller\",\n    \"https://github.com/lukmannurhikma/UnknownKiller\",\n    \"https://github.com/R1perXNX/HuaweiKiller\",\n    \"https://github.com/S12cybersecurity/WinDefenderKiller\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable driver research and lolDrivers database GitHub repos for BYOVD detection.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "feed_ingest",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"https://github.com/eren717/Specter\",\n    \"https://github.com/eren717/WdFilter2\",\n    \"https://github.com/quokka728/TheiaPg\",\n    \"https://github.com/rahul0xkr/gdrv-arbitrary-rw-lpe\",\n    \"https://github.com/b3s3da/TcnPeripheral64_PoC\",\n    \"https://github.com/416rehman/DeepZero\",\n    // Killer/Exploit\n    \"https://github.com/3xploit666/WatchDog_Killer\",\n    \"https://github.com/j3h4ck/PoisonKiller\",\n    \"https://github.com/j3h4ck/UnknownKiller\",\n    \"https://github.com/lukmannurhikma/UnknownKiller\",\n    \"https://github.com/R1perXNX/HuaweiKiller\",\n    \"https://github.com/S12cybersecurity/WinDefenderKiller\",\n    \"https://github.com/Pumi96/DefenderDump\",\n    \"https://github.com/wesmar/kvcKiller\",\n    \"https://github.com/wesmar/kvc\",\n    \"https://github.com/SaadAhla/Killer-Exercice\",\n    \"https://github.com/JohnRyk/Ada-PoisonKiller-BOF\",\n    \"https://github.com/Muz1K1zuM/PoisonKiller_bof\",\n    \"https://github.com/andreisss/KslDump\",\n    \"https://github.com/kyxiaxiang/360WFP_Exploit\",\n    \"https://github.com/osamayo/PhysicalMemExploit\",\n    \"https://github.com/MistyFir/CVE-2024-21338-Exploit\",\n    \"https://github.com/bmassemin/rtcore-vuln\",\n    \"https://github.com/d3sh1n/lsass-dumper\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Kernel driver exploit and AV/EDR killer GitHub repo list for BYOVD threat tracking.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "feed_ingest",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"https://github.com/S12cybersecurity/WinDefenderKiller\",\n    \"https://github.com/Pumi96/DefenderDump\",\n    \"https://github.com/wesmar/kvcKiller\",\n    \"https://github.com/wesmar/kvc\",\n    \"https://github.com/SaadAhla/Killer-Exercice\",\n    \"https://github.com/JohnRyk/Ada-PoisonKiller-BOF\",\n    \"https://github.com/Muz1K1zuM/PoisonKiller_bof\",\n    \"https://github.com/andreisss/KslDump\",\n    \"https://github.com/kyxiaxiang/360WFP_Exploit\",\n    \"https://github.com/osamayo/PhysicalMemExploit\",\n    \"https://github.com/MistyFir/CVE-2024-21338-Exploit\",\n    \"https://github.com/bmassemin/rtcore-vuln\",\n    \"https://github.com/d3sh1n/lsass-dumper\",\n    \"https://github.com/Kalagious/RevoDetectorExploit\",\n    \"https://github.com/chen0430tw/ObMaster\",\n    \"https://github.com/chen0430tw/ParadexMonitor\",\n    \"https://github.com/VoidChecksum/Invalid-ptr\",\n    \"https://github.com/Techo-Fecho/Windows-KMDF-Security-Infrastructure-PoC\",\n    \"https://github.com/nichxlxs/VAC-Bypass\",\n    \"https://github.com/Athexblackhat/Exploit-Research\",\n    \"https://github.com/Ta709/Vanguard-theoretical-malware\",\n    \"https://github.com/Yuragy/Bypass-Protection0x00\",\n    // Red Team/C2\n    \"https://github.com/samftggr/VEN0m-Ransomware\",\n    \"https://github.com/yahyanotani25/tempest-c2\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Windows Defender killer, LSASS dumper, and kernel exploit PoC GitHub repos for threat tracking.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "feed_ingest",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"https://github.com/d3sh1n/lsass-dumper\",\n    \"https://github.com/Kalagious/RevoDetectorExploit\",\n    \"https://github.com/chen0430tw/ObMaster\",\n    \"https://github.com/chen0430tw/ParadexMonitor\",\n    \"https://github.com/VoidChecksum/Invalid-ptr\",\n    \"https://github.com/Techo-Fecho/Windows-KMDF-Security-Infrastructure-PoC\",\n    \"https://github.com/nichxlxs/VAC-Bypass\",\n    \"https://github.com/Athexblackhat/Exploit-Research\",\n    \"https://github.com/Ta709/Vanguard-theoretical-malware\",\n    \"https://github.com/Yuragy/Bypass-Protection0x00\",\n    // Red Team/C2\n    \"https://github.com/samftggr/VEN0m-Ransomware\",\n    \"https://github.com/yahyanotani25/tempest-c2\",\n    \"https://github.com/shashwatttttt/Red-team-ToolKit-\",\n    \"https://github.com/DeadManOfficial/Red-Teaming-Toolkit\",\n    \"https://github.com/CyberSecurityUP/Red-Team-Exercises\",\n    \"https://github.com/JoasASantos/Red-Team-Exercises\",\n    \"https://github.com/0xchriswar/malware-development-roadmap\",\n    \"https://github.com/Elhoucine-Baddouj/Red_Team_Persistence\",\n    \"https://github.com/Exclusive-Networks-CyberLAB/RedTeamLab\",\n    \"https://github.com/atraxsrc/RedTeamMapper\",\n    \"https://github.com/re-belli/red-team-temp\",\n    \"https://github.com/rishavand1/Red-Team-Techniques\",\n    \"https://github.com/blacklanternsecurity/red-run\",\n    \"https://github.com/kevinoriley/red-run\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "LSASS dumper, kernel exploit, and red team C2 GitHub repo list for threat intelligence.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "feed_ingest",
+      "threat_hunting"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"AODDriver2.sys\",\n    \"ASMMAP64.sys\",\n    \"ATSZIO.sys\",\n    \"Agent64.sys\",\n    \"Air_SYSTEM10.sys\",\n    \"AsIO.sys\",\n    \"AsIO2.sys\",\n    \"AsIO3.sys\",\n    \"AsIO32.sys\",\n    \"AsIO3_64.sys\",\n    \"AsIO64.sys\",\n    \"AsUpIO.sys\",\n    \"AsUpIO64.sys\",\n    \"AsrAutoChkUpdDrv.sys\",\n    \"AsrAutoChkUpdDrv_1_0_32.sys\",\n    \"AsrDrv.sys\",\n    \"AsrIbDrv.sys\",\n    \"AsrOmgDrv.sys\",\n    \"AsrRapidStartDrv.sys\",\n    \"AsrSetupDrv103.sys\",\n    \"AsrSmartConnectDrv.sys\",\n    \"Atools2.sys\",\n    \"BSMEMx64.sys\",\n    \"BSMI.sys\",\n    \"BSMIx64.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows kernel driver filenames (A-B range) for BYOVD detection blocklist.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"AsUpIO64.sys\",\n    \"AsrAutoChkUpdDrv.sys\",\n    \"AsrAutoChkUpdDrv_1_0_32.sys\",\n    \"AsrDrv.sys\",\n    \"AsrIbDrv.sys\",\n    \"AsrOmgDrv.sys\",\n    \"AsrRapidStartDrv.sys\",\n    \"AsrSetupDrv103.sys\",\n    \"AsrSmartConnectDrv.sys\",\n    \"Atools2.sys\",\n    \"BSMEMx64.sys\",\n    \"BSMI.sys\",\n    \"BSMIx64.sys\",\n    \"BS_Def64.sys\",\n    \"BS_Flash64.sys\",\n    \"BS_HWMIO64_W10.sys\",\n    \"BS_HWMIo64.sys\",\n    \"BS_I2c64.sys\",\n    \"BS_I2cIo.sys\",\n    \"BS_RCIO.sys\",\n    \"BS_RCIO64.sys\",\n    \"BS_RCIOW1064.sys\",\n    \"Blackbone.sys\",\n    \"Bs_Def.sys\",\n    \"CITMDRV_AMD64.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows kernel driver filenames (As-C range) for BYOVD detection corpus.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"BSMIx64.sys\",\n    \"BS_Def64.sys\",\n    \"BS_Flash64.sys\",\n    \"BS_HWMIO64_W10.sys\",\n    \"BS_HWMIo64.sys\",\n    \"BS_I2c64.sys\",\n    \"BS_I2cIo.sys\",\n    \"BS_RCIO.sys\",\n    \"BS_RCIO64.sys\",\n    \"BS_RCIOW1064.sys\",\n    \"Blackbone.sys\",\n    \"Bs_Def.sys\",\n    \"CITMDRV_AMD64.sys\",\n    \"CITMDRV_IA64.sys\",\n    \"Chaos-Rootkit.sys\",\n    \"CorsairLLAccess64.sys\",\n    \"CtiIo64.sys\",\n    \"CupFixerx64.sys\",\n    \"DellBIOS.sys\",\n    \"Dh_Kernel.sys\",\n    \"Dh_Kernel_10.sys\",\n    \"DirectIo.sys\",\n    \"DirectIo32.sys\",\n    \"DirectIo64.sys\",\n    \"Driver7.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (B range) for BYOVD blocklist maintenance.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"CITMDRV_AMD64.sys\",\n    \"CITMDRV_IA64.sys\",\n    \"Chaos-Rootkit.sys\",\n    \"CorsairLLAccess64.sys\",\n    \"CtiIo64.sys\",\n    \"CupFixerx64.sys\",\n    \"DellBIOS.sys\",\n    \"Dh_Kernel.sys\",\n    \"Dh_Kernel_10.sys\",\n    \"DirectIo.sys\",\n    \"DirectIo32.sys\",\n    \"DirectIo64.sys\",\n    \"Driver7.sys\",\n    \"DtrFlashDrv.sys\",\n    \"DtrFlashDrv64.sys\",\n    \"ECSIoDriver.sys\",\n    \"EIO.sys\",\n    \"ElbyCDIO.sys\",\n    \"EnPortv.sys\",\n    \"EneTechIo64.sys\",\n    \"FPCIE2COM.sys\",\n    \"FairplayKD.sys\",\n    \"ForceDelete.sys\",\n    \"GATEE.sys\",\n    \"GEDevDrv.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (C range) for BYOVD detection and blocking.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"Driver7.sys\",\n    \"DtrFlashDrv.sys\",\n    \"DtrFlashDrv64.sys\",\n    \"ECSIoDriver.sys\",\n    \"EIO.sys\",\n    \"ElbyCDIO.sys\",\n    \"EnPortv.sys\",\n    \"EneTechIo64.sys\",\n    \"FPCIE2COM.sys\",\n    \"FairplayKD.sys\",\n    \"ForceDelete.sys\",\n    \"GATEE.sys\",\n    \"GEDevDrv.sys\",\n    \"GLCKIO2.sys\",\n    \"GPCIDrv64.sys\",\n    \"GPU-Z.sys\",\n    \"GVCIDrv64.sys\",\n    \"GameDriverX64.sys\",\n    \"HOSTNT.sys\",\n    \"HW.sys\",\n    \"HW64.sys\",\n    \"HWAudioOs2Ec.sys\",\n    \"HWAuidoOs2Ec.sys\",\n    \"HpPortIox64.sys\",\n    \"HwOs2Ec10x64.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (D-E range) for BYOVD detection corpus.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"GEDevDrv.sys\",\n    \"GLCKIO2.sys\",\n    \"GPCIDrv64.sys\",\n    \"GPU-Z.sys\",\n    \"GVCIDrv64.sys\",\n    \"GameDriverX64.sys\",\n    \"HOSTNT.sys\",\n    \"HW.sys\",\n    \"HW64.sys\",\n    \"HWAudioOs2Ec.sys\",\n    \"HWAuidoOs2Ec.sys\",\n    \"HpPortIox64.sys\",\n    \"HwOs2Ec10x64.sys\",\n    \"HwOs2Ec7x64.sys\",\n    \"HwRwDrv.sys\",\n    \"IOMap.sys\",\n    \"IOMap64.sys\",\n    \"IObitUnlocker.sys\",\n    \"IUForceDelete.sys\",\n    \"IoAccess.sys\",\n    \"KApcHelper_x64.sys\",\n    \"KfeCo11X64.sys\",\n    \"LHA.sys\",\n    \"LMIinfo.sys\",\n    \"LenovoDiagnosticsDriver.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (G-L range) for BYOVD detection blocklist.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"HwOs2Ec10x64.sys\",\n    \"HwOs2Ec7x64.sys\",\n    \"HwRwDrv.sys\",\n    \"IOMap.sys\",\n    \"IOMap64.sys\",\n    \"IObitUnlocker.sys\",\n    \"IUForceDelete.sys\",\n    \"IoAccess.sys\",\n    \"KApcHelper_x64.sys\",\n    \"KfeCo11X64.sys\",\n    \"LHA.sys\",\n    \"LMIinfo.sys\",\n    \"LenovoDiagnosticsDriver.sys\",\n    \"LgCoreTemp.sys\",\n    \"LgDCatcher.sys\",\n    \"LgDataCatcher.sys\",\n    \"LnvMSRIO.sys\",\n    \"Lv561av.sys\",\n    \"MSqPq.sys\",\n    \"Monitor_win10_x64.sys\",\n    \"MsIo32.sys\",\n    \"MsIo64.sys\",\n    \"NQrmq.sys\",\n    \"NTIOLib.sys\",\n    \"Netfilter.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (H-N range) for BYOVD detection corpus.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"LenovoDiagnosticsDriver.sys\",\n    \"LgCoreTemp.sys\",\n    \"LgDCatcher.sys\",\n    \"LgDataCatcher.sys\",\n    \"LnvMSRIO.sys\",\n    \"Lv561av.sys\",\n    \"MSqPq.sys\",\n    \"Monitor_win10_x64.sys\",\n    \"MsIo32.sys\",\n    \"MsIo64.sys\",\n    \"NQrmq.sys\",\n    \"NTIOLib.sys\",\n    \"Netfilter.sys\",\n    \"NlsLexicons0024UvN.sys\",\n    \"NodeDriver.sys\",\n    \"OpenLibSys.sys\",\n    \"PCHunter.sys\",\n    \"PDFWKRNL.sys\",\n    \"PanIO.sys\",\n    \"PanIOx64.sys\",\n    \"PanMonFlt.sys\",\n    \"PanMonFltX64.sys\",\n    \"PhlashNT.sys\",\n    \"Phymemx64.sys\",\n    \"ProcObsrvesx.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (L-P range) for BYOVD detection blocklist.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"Netfilter.sys\",\n    \"NlsLexicons0024UvN.sys\",\n    \"NodeDriver.sys\",\n    \"OpenLibSys.sys\",\n    \"PCHunter.sys\",\n    \"PDFWKRNL.sys\",\n    \"PanIO.sys\",\n    \"PanIOx64.sys\",\n    \"PanMonFlt.sys\",\n    \"PanMonFltX64.sys\",\n    \"PhlashNT.sys\",\n    \"Phymemx64.sys\",\n    \"ProcObsrvesx.sys\",\n    \"ProcessMonitorDriver.sys\",\n    \"ProtectS.sys\",\n    \"ProxyDrv.sys\",\n    \"RTCore64.sys\",\n    \"RwDrv.sys\",\n    \"SBIOSIO64.sys\",\n    \"Se64a.sys\",\n    \"SeasunProtect.sys\",\n    \"SgrmAgent.sys\",\n    \"SmSerl64.sys\",\n    \"SysDrv3S.sys\",\n    \"SysInfo.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (N-S range) for BYOVD detection corpus.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"ProcObsrvesx.sys\",\n    \"ProcessMonitorDriver.sys\",\n    \"ProtectS.sys\",\n    \"ProxyDrv.sys\",\n    \"RTCore64.sys\",\n    \"RwDrv.sys\",\n    \"SBIOSIO64.sys\",\n    \"Se64a.sys\",\n    \"SeasunProtect.sys\",\n    \"SgrmAgent.sys\",\n    \"SmSerl64.sys\",\n    \"SysDrv3S.sys\",\n    \"SysInfo.sys\",\n    \"SysInfoDetectorX64.sys\",\n    \"Sysprox.sys\",\n    \"TPwSav.sys\",\n    \"TVicPort.sys\",\n    \"TVicPort64.sys\",\n    \"TdeIo64.sys\",\n    \"TfFsMon.sys\",\n    \"TfNetMon.sys\",\n    \"TfSysMon.sys\",\n    \"TmComm.sys\",\n    \"Tmel.sys\",\n    \"VBoxDrv.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (P-V range) for BYOVD detection blocklist.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"SysInfo.sys\",\n    \"SysInfoDetectorX64.sys\",\n    \"Sysprox.sys\",\n    \"TPwSav.sys\",\n    \"TVicPort.sys\",\n    \"TVicPort64.sys\",\n    \"TdeIo64.sys\",\n    \"TfFsMon.sys\",\n    \"TfNetMon.sys\",\n    \"TfSysMon.sys\",\n    \"TmComm.sys\",\n    \"Tmel.sys\",\n    \"VBoxDrv.sys\",\n    \"VBoxTAP.sys\",\n    \"VBoxUSBMon.sys\",\n    \"VProEventMonitor.sys\",\n    \"VdBSv64.sys\",\n    \"ViveRRAudio.sys\",\n    \"WCPU.sys\",\n    \"WINIODrv.sys\",\n    \"WinFlash64.sys\",\n    \"WinRing0.sys\",\n    \"WinTapix.sys\",\n    \"WindowsKernelExplorer.sys\",\n    \"WiseUnlo.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (S-W range) for BYOVD detection corpus.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"VBoxDrv.sys\",\n    \"VBoxTAP.sys\",\n    \"VBoxUSBMon.sys\",\n    \"VProEventMonitor.sys\",\n    \"VdBSv64.sys\",\n    \"ViveRRAudio.sys\",\n    \"WCPU.sys\",\n    \"WINIODrv.sys\",\n    \"WinFlash64.sys\",\n    \"WinRing0.sys\",\n    \"WinTapix.sys\",\n    \"WindowsKernelExplorer.sys\",\n    \"WiseUnlo.sys\",\n    \"a236e7d654cd932b7d11cb604629a2d0.sys\",\n    \"a26363e7b02b13f2b8d697abb90cd5c3.sys\",\n    \"a9df5964635ef8bd567ae487c3d214c4.sys\",\n    \"agrsm.sys\",\n    \"agrsm64.sys\",\n    \"amifldrv.sys\",\n    \"amifldrv64.sys\",\n    \"amigendrv64.sys\",\n    \"amp.sys\",\n    \"ampa.sys\",\n    \"amsdk.sys\",\n    \"asio.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (V-a range, mixed case) for BYOVD detection.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"WiseUnlo.sys\",\n    \"a236e7d654cd932b7d11cb604629a2d0.sys\",\n    \"a26363e7b02b13f2b8d697abb90cd5c3.sys\",\n    \"a9df5964635ef8bd567ae487c3d214c4.sys\",\n    \"agrsm.sys\",\n    \"agrsm64.sys\",\n    \"amifldrv.sys\",\n    \"amifldrv64.sys\",\n    \"amigendrv64.sys\",\n    \"amp.sys\",\n    \"ampa.sys\",\n    \"amsdk.sys\",\n    \"asio.sys\",\n    \"asmmap.sys\",\n    \"asmmap64.sys\",\n    \"aswArPot.sys\",\n    \"aswVmm.sys\",\n    \"atillk64.sys\",\n    \"avalueio.sys\",\n    \"avtagent.sys\",\n    \"be6318413160e589080df02bb3ca6e6a.sys\",\n    \"bedaisy.sys\",\n    \"bindflt.sys\",\n    \"biontdrv.sys\",\n    \"biontdrv_wink.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (W-b range) for BYOVD detection blocklist.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"asio.sys\",\n    \"asmmap.sys\",\n    \"asmmap64.sys\",\n    \"aswArPot.sys\",\n    \"aswVmm.sys\",\n    \"atillk64.sys\",\n    \"avalueio.sys\",\n    \"avtagent.sys\",\n    \"be6318413160e589080df02bb3ca6e6a.sys\",\n    \"bedaisy.sys\",\n    \"bindflt.sys\",\n    \"biontdrv.sys\",\n    \"biontdrv_wink.sys\",\n    \"bs_hwmio64.sys\",\n    \"bs_rcio64.sys\",\n    \"c94f405c5929cfcccc8ad00b42c95083.sys\",\n    \"cg6kwin2k.sys\",\n    \"cpuz.sys\",\n    \"cpuz141.sys\",\n    \"cpuz_x64.sys\",\n    \"d.sys\",\n    \"daxin_blank.sys\",\n    \"daxin_blank1.sys\",\n    \"daxin_blank2.sys\",\n    \"daxin_blank3.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (a-c range, lowercase) for BYOVD detection.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"biontdrv_wink.sys\",\n    \"bs_hwmio64.sys\",\n    \"bs_rcio64.sys\",\n    \"c94f405c5929cfcccc8ad00b42c95083.sys\",\n    \"cg6kwin2k.sys\",\n    \"cpuz.sys\",\n    \"cpuz141.sys\",\n    \"cpuz_x64.sys\",\n    \"d.sys\",\n    \"daxin_blank.sys\",\n    \"daxin_blank1.sys\",\n    \"daxin_blank2.sys\",\n    \"daxin_blank3.sys\",\n    \"daxin_blank4.sys\",\n    \"daxin_blank5.sys\",\n    \"daxin_blank6.sys\",\n    \"dbk64.sys\",\n    \"dbutil_2_3.sys\",\n    \"dcr.sys\",\n    \"directio.sys\",\n    \"directio32_legacy.sys\",\n    \"directio64.sys\",\n    \"dkrTK.sys\",\n    \"driver-x64.sys\",\n    \"driver7-x64.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (b-d range) including daxin rootkit drivers.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"daxin_blank3.sys\",\n    \"daxin_blank4.sys\",\n    \"daxin_blank5.sys\",\n    \"daxin_blank6.sys\",\n    \"dbk64.sys\",\n    \"dbutil_2_3.sys\",\n    \"dcr.sys\",\n    \"directio.sys\",\n    \"directio32_legacy.sys\",\n    \"directio64.sys\",\n    \"dkrTK.sys\",\n    \"driver-x64.sys\",\n    \"driver7-x64.sys\",\n    \"driver7-x86-withoutdbg.sys\",\n    \"driver7-x86.sys\",\n    \"e29f6311ae87542b3d693c1f38e4e3ad.sys\",\n    \"e939448b28a4edc81f1f974cebf6e7d2.sys\",\n    \"ef0e1725aaf0c6c972593f860531a2ea.sys\",\n    \"elbycdio.sys\",\n    \"elrawdsk.sys\",\n    \"ene.sys\",\n    \"eneio64.sys\",\n    \"etdsupp.sys\",\n    \"fd3b7234419fafc9bdd533f48896ed73_b816c5cd.sys\",\n    \"fiddrv64.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (d-e range) for BYOVD detection corpus.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"driver7-x64.sys\",\n    \"driver7-x86-withoutdbg.sys\",\n    \"driver7-x86.sys\",\n    \"e29f6311ae87542b3d693c1f38e4e3ad.sys\",\n    \"e939448b28a4edc81f1f974cebf6e7d2.sys\",\n    \"ef0e1725aaf0c6c972593f860531a2ea.sys\",\n    \"elbycdio.sys\",\n    \"elrawdsk.sys\",\n    \"ene.sys\",\n    \"eneio64.sys\",\n    \"etdsupp.sys\",\n    \"fd3b7234419fafc9bdd533f48896ed73_b816c5cd.sys\",\n    \"fiddrv64.sys\",\n    \"fidpcidrv64.sys\",\n    \"filnk.sys\",\n    \"fur.sys\",\n    \"gametersafe.sys\",\n    \"gdrv3.sys\",\n    \"gftkyj64.sys\",\n    \"gmer32.sys\",\n    \"gmer64.sys\",\n    \"gpu-z-v2.sys\",\n    \"gpuz-v2.sys\",\n    \"gvcidrv64.sys\",\n    \"hw.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (d-g range, lowercase) for BYOVD blocklist.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"fiddrv64.sys\",\n    \"fidpcidrv64.sys\",\n    \"filnk.sys\",\n    \"fur.sys\",\n    \"gametersafe.sys\",\n    \"gdrv3.sys\",\n    \"gftkyj64.sys\",\n    \"gmer32.sys\",\n    \"gmer64.sys\",\n    \"gpu-z-v2.sys\",\n    \"gpuz-v2.sys\",\n    \"gvcidrv64.sys\",\n    \"hw.sys\",\n    \"hwdetectng.sys\",\n    \"inpout32.sys\",\n    \"inpoutx64.sys\",\n    \"iobitunlocker.sys\",\n    \"iomem64.sys\",\n    \"irec.sys\",\n    \"kEvP64.sys\",\n    \"kbdcap64.sys\",\n    \"klmd.sys\",\n    \"kprocesshacker.sys\",\n    \"krpocesshacker.sys\",\n    \"ksapi.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (f-k range) for BYOVD detection corpus.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"hw.sys\",\n    \"hwdetectng.sys\",\n    \"inpout32.sys\",\n    \"inpoutx64.sys\",\n    \"iobitunlocker.sys\",\n    \"iomem64.sys\",\n    \"irec.sys\",\n    \"kEvP64.sys\",\n    \"kbdcap64.sys\",\n    \"klmd.sys\",\n    \"kprocesshacker.sys\",\n    \"krpocesshacker.sys\",\n    \"ksapi.sys\",\n    \"ksapi64.sys\",\n    \"ktmutil7ODM.sys\",\n    \"libnicm.sys\",\n    \"lmiinfo.sys\",\n    \"ltmdmnt.sys\",\n    \"mJj0ge.sys\",\n    \"magdrvamd64.sys\",\n    \"malicious.sys\",\n    \"mhyprot.sys\",\n    \"mhyprot3.sys\",\n    \"mhyprotect.sys\",\n    \"mhyprotnap.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (h-m range) including mhyprot game driver variants.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"ksapi.sys\",\n    \"ksapi64.sys\",\n    \"ktmutil7ODM.sys\",\n    \"libnicm.sys\",\n    \"lmiinfo.sys\",\n    \"ltmdmnt.sys\",\n    \"mJj0ge.sys\",\n    \"magdrvamd64.sys\",\n    \"malicious.sys\",\n    \"mhyprot.sys\",\n    \"mhyprot3.sys\",\n    \"mhyprotect.sys\",\n    \"mhyprotnap.sys\",\n    \"mhyprotrpg.sys\",\n    \"mimidrv.sys\",\n    \"mimikatz.sys\",\n    \"msrhook.sys\",\n    \"mtcBSv64.sys\",\n    \"mydrivers.sys\",\n    \"ncpl.sys\",\n    \"ndislan.sys\",\n    \"neofltr.sys\",\n    \"netfilter2.sys\",\n    \"netfilterdrv.sys\",\n    \"netflt.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (k-n range) including mimikatz driver.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"mhyprotnap.sys\",\n    \"mhyprotrpg.sys\",\n    \"mimidrv.sys\",\n    \"mimikatz.sys\",\n    \"msrhook.sys\",\n    \"mtcBSv64.sys\",\n    \"mydrivers.sys\",\n    \"ncpl.sys\",\n    \"ndislan.sys\",\n    \"neofltr.sys\",\n    \"netfilter2.sys\",\n    \"netfilterdrv.sys\",\n    \"netflt.sys\",\n    \"ngiodriver.sys\",\n    \"nicm.sys\",\n    \"nscm.sys\",\n    \"ntbios.sys\",\n    \"ntbios_2.sys\",\n    \"nvflash.sys\",\n    \"nvflsh32.sys\",\n    \"nvflsh64.sys\",\n    \"nvoclock.sys\",\n    \"otipcibus.sys\",\n    \"pchunter.sys\",\n    \"phydmaccx64.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (m-p range) for BYOVD detection corpus.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"netflt.sys\",\n    \"ngiodriver.sys\",\n    \"nicm.sys\",\n    \"nscm.sys\",\n    \"ntbios.sys\",\n    \"ntbios_2.sys\",\n    \"nvflash.sys\",\n    \"nvflsh32.sys\",\n    \"nvflsh64.sys\",\n    \"nvoclock.sys\",\n    \"otipcibus.sys\",\n    \"pchunter.sys\",\n    \"phydmaccx64.sys\",\n    \"phydmaccx86.sys\",\n    \"phymem64.sys\",\n    \"phymem_ext64.sys\",\n    \"physmem.sys\",\n    \"piddrv64.sys\",\n    \"pmxdrv.sys\",\n    \"probmon.sys\",\n    \"psmounterex.sys\",\n    \"reddriver.sys\",\n    \"rspot.sys\",\n    \"rtcoremini64.sys\",\n    \"rtkio.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (n-r range) for BYOVD detection blocklist.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"phydmaccx64.sys\",\n    \"phydmaccx86.sys\",\n    \"phymem64.sys\",\n    \"phymem_ext64.sys\",\n    \"physmem.sys\",\n    \"piddrv64.sys\",\n    \"pmxdrv.sys\",\n    \"probmon.sys\",\n    \"psmounterex.sys\",\n    \"reddriver.sys\",\n    \"rspot.sys\",\n    \"rtcoremini64.sys\",\n    \"rtkio.sys\",\n    \"rtkio64.sys\",\n    \"rtkiow10x64.sys\",\n    \"rtkiow8x64.sys\",\n    \"rtport.sys\",\n    \"rtport64.sys\",\n    \"rwdrv.sys\",\n    \"rzpnk.sys\",\n    \"sandra.sys\",\n    \"segwindrvx64.sys\",\n    \"semav6msr.sys\",\n    \"sepdrv3_1.sys\",\n    \"sfdrvx32.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (p-r range) for BYOVD detection corpus.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"rtkio.sys\",\n    \"rtkio64.sys\",\n    \"rtkiow10x64.sys\",\n    \"rtkiow8x64.sys\",\n    \"rtport.sys\",\n    \"rtport64.sys\",\n    \"rwdrv.sys\",\n    \"rzpnk.sys\",\n    \"sandra.sys\",\n    \"segwindrvx64.sys\",\n    \"semav6msr.sys\",\n    \"sepdrv3_1.sys\",\n    \"sfdrvx32.sys\",\n    \"sfdrvx64.sys\",\n    \"skill.sys\",\n    \"smep_namco.sys\",\n    \"speedfan.sys\",\n    \"spf.sys\",\n    \"spwizimgVT.sys\",\n    \"stdcdrv64.sys\",\n    \"stdcdrvws64.sys\",\n    \"stflt.sys\",\n    \"superbmc.sys\",\n    \"sysconp.sys\",\n    \"sysdiag.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (r-s range) for BYOVD detection blocklist.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"sfdrvx32.sys\",\n    \"sfdrvx64.sys\",\n    \"skill.sys\",\n    \"smep_namco.sys\",\n    \"speedfan.sys\",\n    \"spf.sys\",\n    \"spwizimgVT.sys\",\n    \"stdcdrv64.sys\",\n    \"stdcdrvws64.sys\",\n    \"stflt.sys\",\n    \"superbmc.sys\",\n    \"sysconp.sys\",\n    \"sysdiag.sys\",\n    \"szkg64.sys\",\n    \"tboflhelper.sys\",\n    \"telephonuAfY.sys\",\n    \"throttlestop.sys\",\n    \"typelibdE.sys\",\n    \"vboxdrv.sys\",\n    \"viraglt64.sys\",\n    \"viragt.sys\",\n    \"viragt64.sys\",\n    \"viverraudio.sys\",\n    \"vmdrv.sys\",\n    \"vna0901.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (s-v range) for BYOVD detection corpus.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"sysdiag.sys\",\n    \"szkg64.sys\",\n    \"tboflhelper.sys\",\n    \"telephonuAfY.sys\",\n    \"throttlestop.sys\",\n    \"typelibdE.sys\",\n    \"vboxdrv.sys\",\n    \"viraglt64.sys\",\n    \"viragt.sys\",\n    \"viragt64.sys\",\n    \"viverraudio.sys\",\n    \"vmdrv.sys\",\n    \"vna0901.sys\",\n    \"wamsdk.sys\",\n    \"wantd.sys\",\n    \"wantd_2.sys\",\n    \"wantd_3.sys\",\n    \"wantd_4.sys\",\n    \"wantd_5.sys\",\n    \"wantd_6.sys\",\n    \"wfshbr64.sys\",\n    \"windbg.sys\",\n    \"winio64.sys\",\n    \"wnbios.sys\",\n    \"wsddprm.sys\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Vulnerable Windows driver filenames (s-w range, tail) for BYOVD detection blocklist.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "threat_hunting",
+      "vulnerability_tracking"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"MultiAgent-Cyber-Defense-System\",\n    \"-LLM-Agents\",\n    \"cyber-security-llm-\",\n    \"Penetration_Testing_POC\",\n    \"monolith-test\",\n    \"techdrops\",\n    \"-llm\",\n    \"-logs\",\n    \"-claw\",\n    \"claude-\",\n    \"alphora\",\n    \"rampart\",\n    \"vless\",\n    \"kanban\",\n    \"blog\",\n    \"gitweekly\",\n    \"cc-plugin\",\n    \"instguid\",\n    \"impromptu\",\n    \"mcp-\",\n    \"multiagent\",\n    \"medium-writeup\",\n    \"Phishing-Simulation\",\n    \"NETWAYS\",\n    \"battle-hardened-ai\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "GitHub repo name blacklist patterns to filter false-positive matches during threat repo hunting.",
+    "result_tags": [
+      "deduplication",
+      "threat_hunting",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"vless\",\n    \"kanban\",\n    \"blog\",\n    \"gitweekly\",\n    \"cc-plugin\",\n    \"instguid\",\n    \"impromptu\",\n    \"mcp-\",\n    \"multiagent\",\n    \"medium-writeup\",\n    \"Phishing-Simulation\",\n    \"NETWAYS\",\n    \"battle-hardened-ai\",\n    \"jwrhw7tueydwtt7575g\",\n    \"SOC-Analyst-Resources-Hub\",\n    \"roadmap-for\",\n    \"dont-track-me\",\n    \"offensive-\",\n    \"loldrivers-database\",\n    \"Exercises\",\n    \"ATLAS-ATTACK-ECOSSYSTEM\",\n    \"Threat-Hunting-Rules\",\n    \"_learning\",\n    \"Century300\",\n    \"Security-Lab\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Continuation of GitHub repo name exclusion patterns for threat intelligence corpus quality.",
+    "result_tags": [
+      "deduplication",
+      "threat_hunting",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"halos gate\",\n    \"tartarus gate\",\n    \"freshycalls\",\n    \"syswhispers\",\n    \"ntdll unhooking\",\n    \"sleep obfuscation\",\n    \"sleep encryption\",\n    \"sleep masking\",\n    \"ekko obfuscation\",\n    \"foliage sleep\",\n    \"zilean sleep\",\n    \"stack spoofing\",\n    \"call stack masking\",\n    \"pool party injection\",\n    \"mockingjay technique\",\n    \"process ghosting\",\n    \"process herpaderping\",\n    \"dirty vanity\",\n    \"module stomping\",\n    \"phantom dll\",\n    \"early bird apc\",\n    \"threadless injection\",\n    \"ppl bypass\",\n    \"protected process light\",\n    \"byovd\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Offensive security technique search terms (halos gate, sleep obfuscation, process injection) for GitHub repo hunting.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "malware_analysis",
+      "threat_hunting"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"call stack masking\",\n    \"pool party injection\",\n    \"mockingjay technique\",\n    \"process ghosting\",\n    \"process herpaderping\",\n    \"dirty vanity\",\n    \"module stomping\",\n    \"phantom dll\",\n    \"early bird apc\",\n    \"threadless injection\",\n    \"ppl bypass\",\n    \"protected process light\",\n    \"byovd\",\n    \"bring your own vulnerable driver\",\n    \"kernel callback removal\",\n    \"callback overwriting\",\n    \"etwti evasion\",\n    \"driver killing\",\n    \"known dll hijacking\",\n    \"amsi bypass\",\n    \"amsi patch\",\n    \"etw patch\",\n    \"etw bypass\",\n    \"ppid spoof\",\n    \"process hollowing\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Advanced offensive technique keywords (process ghosting, module stomping, PPL bypass) for malware repo discovery.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "malware_analysis",
+      "threat_hunting"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"byovd\",\n    \"bring your own vulnerable driver\",\n    \"kernel callback removal\",\n    \"callback overwriting\",\n    \"etwti evasion\",\n    \"driver killing\",\n    \"known dll hijacking\",\n    \"amsi bypass\",\n    \"amsi patch\",\n    \"etw patch\",\n    \"etw bypass\",\n    \"ppid spoof\",\n    \"process hollowing\",\n    \"credential dump\",\n    \"lsass\",\n    \"minifilter\",\n    \"ntdll stomping\",\n    \"byod\",\n    \"hardware breakpoint\",\n    \"instrumentation callback\",\n    \"nirvana callback\",\n    \"coff loader\",\n    \"bof loader\",\n    \"object file loader\",\n    \"reflective dll\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Offensive capability search terms (BYOVD, AMSI bypass, credential dump, BOF loader) for threat hunting.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "malware_analysis",
+      "threat_hunting"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"process hollowing\",\n    \"credential dump\",\n    \"lsass\",\n    \"minifilter\",\n    \"ntdll stomping\",\n    \"byod\",\n    \"hardware breakpoint\",\n    \"instrumentation callback\",\n    \"nirvana callback\",\n    \"coff loader\",\n    \"bof loader\",\n    \"object file loader\",\n    \"reflective dll\",\n    \"fiber execution\",\n    \"apc queue\",\n    \"heap encryption\",\n    \"t1218\",\n    \"t1548\",\n    // CJK technique-specific terms (HIGH weight)\n    \"免杀\",\n    \"免杀对抗\",\n    \"漏洞驱动\",\n    \"远控源码\",\n    \"银狐远控\",\n    \"毒药远程控制\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Additional offensive technique terms including CJK EDR bypass phrases for multilingual repo discovery.",
+    "result_tags": [
+      "edr_bypass_detection",
+      "malware_analysis",
+      "threat_hunting"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"reflective dll\",\n    \"fiber execution\",\n    \"apc queue\",\n    \"heap encryption\",\n    \"t1218\",\n    \"t1548\",\n    // CJK technique-specific terms (HIGH weight)\n    \"免杀\",\n    \"免杀对抗\",\n    \"漏洞驱动\",\n    \"远控源码\",\n    \"银狐远控\",\n    \"毒药远程控制\",\n    \"edr 绕过\",\n    \"杀软对抗\",\n    \"驱动利用\",\n    // Russian technique-specific terms (HIGH weight)\n    \"обход edr\",\n    \"обход антивируса\",\n    \"уязвимый драйвер\",\n    \"эксплуатация драйвера\",\n    \"отключение edr\",\n    \"удалённое управление\",\n    \"обход детекта\",\n    \"фуд\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Russian and CJK language offensive security terms for international threat actor repo discovery.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "malware_analysis",
+      "threat_hunting"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"process injection\",\n    \"kernel callback\",\n    \"shellcode loader\",\n    \"shellcode runner\",\n    \"dll sideload\",\n    \"rop chain\",\n    \"red team poc\",\n    \"malware development\",\n    \"offensive rust\",\n    \"offensive nim\",\n    \"edr bypass\",\n    \"edr-bypass\",\n    \"edr evasion\",\n    \"undocumented api\",\n    \"custom loader\",\n    \"vulnerable driver\",\n    \"c2 framework\",\n    \"implant\",\n    \"payload generator\",\n    \"defense evasion\",\n    \"opsec\",\n    // CJK contextual terms (NORMAL weight)\n    \"火绒\",\n    \"自动 收集器\",\n    \"调查\"",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Offensive security technique keywords (process injection, shellcode, C2 framework, defense evasion) for repo hunting.",
+    "result_tags": [
+      "actor_tracking",
+      "edr_bypass_detection",
+      "malware_analysis",
+      "threat_hunting"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "// ============================================================================\n// PUBLIC GETTERS — read from globals, merge with defaults to pick up new entries\n// ============================================================================",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Section header comment marking public getter functions for reading configuration from globals.",
+    "result_tags": [
+      "scaffolding",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "// ============================================================================\n// TARGET MAPPING — maps target names to globals keys and defaults\n// ============================================================================",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.config.storm",
+    "chunk_type": "window",
+    "description": "Section header comment marking target-to-globals-key mapping configuration block.",
+    "result_tags": [
+      "scaffolding",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "/*\nUtility functions for S1 GitHub Tracker Power-Up.\n\nShared helpers for blacklist checking, rate limit tracking,\nREADME fetching/storing, and repo node operations.\n*/",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-github-tracker\\storm\\modules\\s1.github.tracker.utils.storm",
+    "chunk_type": "window",
+    "description": "Module docstring describing shared utility helpers for blacklist checking, rate limiting, and repo operations.",
+    "result_tags": [
+      "scaffolding",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "$fresh = $lib.import(s1.fresh)\n$max_questions = $lib.cast(int, $cmdopts.max_questions)\nif $cmdopts.debug {\n    $lib.debug = $lib.true\n}\n\nyield $fresh.generateInterestQueries($node, $cmdopts.interests, $max_questions)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-fresh-sentinel\\synmods\\fresh_sentinel\\assets\\storm\\commands\\s1.fresh.interest.storm",
+    "chunk_type": "window",
+    "description": "Generates interest-based queries from a node using the Fresh module with configurable question count.",
+    "result_tags": [
+      "cti_triage",
+      "reporting",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "yield"
+    ]
+  },
+  {
+    "text": "if $cmdopts.debug {\n    $lib.debug = $lib.true\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-fresh-sentinel\\synmods\\fresh_sentinel\\assets\\storm\\commands\\s1.fresh.interest.storm",
+    "chunk_type": "if",
+    "description": "Sets the Storm debug flag when a debug command option is provided.",
+    "result_tags": [
+      "configuration",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "init {\n    if $cmdopts.debug {\n        $lib.debug = $lib.true\n    }\n    \n    $time_from = $cmdopts.time_from\n    $time_to = $cmdopts.time_to\n    \n    if $lib.debug {\n        if $time_from {\n            $lib.print(\"Filtering nodes created after: {time}\", time=$time_from)\n        }\n        if $time_to {\n            $lib.print(\"Filtering nodes created before: {time}\", time=$time_to)\n        }\n    }\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-fresh-sentinel\\synmods\\fresh_sentinel\\assets\\storm\\commands\\s1.fresh.notify.storm",
+    "chunk_type": "init",
+    "description": "Init block that configures time range filters and logs debug info about node creation window.",
+    "result_tags": [
+      "configuration",
+      "utility"
+    ],
+    "technique_tags": [
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "init {\n    $ingest = $lib.import(s1.dfir.ingest)\n    $ingest.case($cmdopts.json)\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-dfir\\storm\\commands\\s1.dfir.case.storm",
+    "chunk_type": "init",
+    "description": "Imports the DFIR ingest module and creates a Synapse case from a JSON command option.",
+    "result_tags": [
+      "data_ingest",
+      "incident_response"
+    ],
+    "technique_tags": [
+      "init_block"
+    ]
+  },
+  {
+    "text": "// Test with verbose output\n    s1.detectionlab.test.connection --verbose\n*/\n\n// Import the privsep module\ninit {\n    $privsep = $lib.import(s1.detectionlab.privsep)\n}\n\n// Main command logic - delegate to privsep.healthcheck()\n$verbose = $lib.false\nif $cmdopts.verbose {\n    $verbose = $lib.true\n}\n\n$privsep.healthcheck($verbose)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detectionlab\\storm\\commands\\s1.detectionlab.healthcheck.storm",
+    "chunk_type": "window",
+    "description": "Runs a Detection Lab health check via privsep module with optional verbose output.",
+    "result_tags": [
+      "configuration",
+      "reporting"
+    ],
+    "technique_tags": [
+      "init_block"
+    ]
+  },
+  {
+    "text": "$detectionlab = $lib.import(s1.detectionlab)\n\ndivert $cmdopts.yield $detectionlab.get_session_results($node, $cmdopts)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detectionlab\\storm\\commands\\s1.detectionlab.session.storm",
+    "chunk_type": "window",
+    "description": "Retrieves Detection Lab session results for a node using divert/yield pattern.",
+    "result_tags": [
+      "data_export",
+      "reporting"
+    ],
+    "technique_tags": [
+      "yield"
+    ]
+  },
+  {
+    "text": "/*\nSet the Detection Lab API key (global only)\n*/\n\n$admin = $lib.import(s1.detectionlab.privsep.admin)\n$admin.set_global_apikey($cmdopts.apikey)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detectionlab\\storm\\commands\\s1.detectionlab.setup.apikey.storm",
+    "chunk_type": "window",
+    "description": "Sets the Detection Lab API key globally via privsep admin module.",
+    "result_tags": [
+      "configuration",
+      "credential_management"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "/*\nConfigure the environment for the S1 Detection Lab integration\n\nThis command configures whether to use the internal or production environment.\nThe environment affects:\n- Which identity service URL is used\n- Whether x-forwarded-host header is added for internal environments\n\nExamples:\n    // Set to internal environment (default)\n    s1.detectionlab.setup.environment int\n\n    // Set to production environment\n    s1.detectionlab.setup.environment prod\n    \n    // Show current environment\n    s1.detectionlab.setup.environment --show\n*/\n\n// Check if we're showing the current config",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detectionlab\\storm\\commands\\s1.detectionlab.setup.environment.storm",
+    "chunk_type": "window",
+    "description": "Docstring for environment configuration command showing internal vs production environment examples.",
+    "result_tags": [
+      "configuration",
+      "documentation"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "// Set to production environment\n    s1.detectionlab.setup.environment prod\n    \n    // Show current environment\n    s1.detectionlab.setup.environment --show\n*/\n\n// Check if we're showing the current config",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detectionlab\\storm\\commands\\s1.detectionlab.setup.environment.storm",
+    "chunk_type": "window",
+    "description": "Shows current environment configuration or partial help text for environment setup command.",
+    "result_tags": [
+      "configuration",
+      "documentation"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "// Validate environment argument\nif (not $cmdopts.environment) {\n    $lib.print(\"Usage: s1.detectionlab.setup.environment <int|prod>\")\n    $lib.print(\"  Use 'int' for internal environment\")\n    $lib.print(\"  Use 'prod' for production environment\")\n    $lib.print(\"  Use --show to display current configuration\")\n    return()\n}\n\n$env = $cmdopts.environment.lower()\n\nif (not (($env = \"int\") or ($env = \"prod\"))) {\n    $lib.warn(`Invalid environment: {$cmdopts.environment}. Must be 'int' or 'prod'.`)\n    return()\n}\n\n// Set the environment\n$lib.globals.set(s1.detectionlab.environment, $env)\n\n// Update identity service URL based on environment",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detectionlab\\storm\\commands\\s1.detectionlab.setup.environment.storm",
+    "chunk_type": "window",
+    "description": "Validates environment argument and prints usage instructions if missing or invalid.",
+    "result_tags": [
+      "configuration",
+      "utility"
+    ],
+    "technique_tags": [
+      "conditional",
+      "globals_set",
+      "lib_print",
+      "lib_warn",
+      "return"
+    ]
+  },
+  {
+    "text": "if (not $cmdopts.environment) {\n    $lib.print(\"Usage: s1.detectionlab.setup.environment <int|prod>\")\n    $lib.print(\"  Use 'int' for internal environment\")\n    $lib.print(\"  Use 'prod' for production environment\")\n    $lib.print(\"  Use --show to display current configuration\")\n    return()\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detectionlab\\storm\\commands\\s1.detectionlab.setup.environment.storm",
+    "chunk_type": "if",
+    "description": "Validates that the environment command option is present, printing usage if missing.",
+    "result_tags": [
+      "configuration",
+      "utility"
+    ],
+    "technique_tags": [
+      "conditional",
+      "lib_print",
+      "return"
+    ]
+  },
+  {
+    "text": "if (not (($env = \"int\") or ($env = \"prod\"))) {\n    $lib.warn(`Invalid environment: {$cmdopts.environment}. Must be 'int' or 'prod'.`)\n    return()\n}\n\n// Set the environment\n$lib.globals.set(s1.detectionlab.environment, $env)\n\n// Update identity service URL based on environment\nif ($env = \"int\") {\n    $identity_service = \"https://identity-service-us-east-1-int.s1.guru\"\n    $lib.globals.set(s1.detectionlab.identity_service, $identity_service)\n    $lib.print(`✓ Environment set to: internal`)\n    $lib.print(`  Identity Service: {$identity_service}`)\n    $lib.print(\"  x-forwarded-host header will be added to requests\")\n} else {\n    $identity_service = \"https://identity-service-us-east-1-prod.s1.guru\"\n    $lib.globals.set(s1.detectionlab.identity_service, $identity_service)\n    $lib.print(`✓ Environment set to: production`)\n    $lib.print(`  Identity Service: {$identity_service}`)\n}\n\n$lib.print(\"\\nConfiguration saved. Use 's1.detectionlab.healthcheck' to verify connectivity.\")",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detectionlab\\storm\\commands\\s1.detectionlab.setup.environment.storm",
+    "chunk_type": "window",
+    "description": "Sets Detection Lab environment and identity service URL in globals based on int/prod selection.",
+    "result_tags": [
+      "configuration",
+      "globals_set"
+    ],
+    "technique_tags": [
+      "conditional",
+      "globals_set",
+      "lib_print",
+      "lib_warn",
+      "return"
+    ]
+  },
+  {
+    "text": "/*\nConfigure the Detection Lab (DEXTR) service URL\n\nThis command configures the base URL for DEXTR API calls.\nDefault URLs:\n- Internal: http://10.81.8.90\n- Production: https://detection-ops-central-us-east-1-prod.s1.guru/api/dextr\n\nExamples:\n    // Set to internal URL (default)\n    s1.detectionlab.setup.url http://10.81.8.90\n    \n    // Set to production URL\n    s1.detectionlab.setup.url https://detection-ops-central-us-east-1-prod.s1.guru/api/dextr\n    \n    // Set to alternate internal IP\n    s1.detectionlab.setup.url http://10.81.11.235\n    \n    // Show current URL\n    s1.detectionlab.setup.url --show\n    \n    // Reset to default\n    s1.detectionlab.setup.url --reset\n*/",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detectionlab\\storm\\commands\\s1.detectionlab.setup.url.storm",
+    "chunk_type": "window",
+    "description": "Docstring for Detection Lab URL configuration command with internal and production URL examples.",
+    "result_tags": [
+      "configuration",
+      "documentation"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "/*\nIngest module for S1 Detection Lab powerup\nCreates Synapse nodes from Detection Lab API responses using built-in node types\n*/",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detectionlab\\storm\\modules\\s1.detectionlab.ingest.storm",
+    "chunk_type": "window",
+    "description": "Module comment describing the Detection Lab ingest module for creating Synapse nodes from API responses.",
+    "result_tags": [
+      "scaffolding",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "/*\nData model definitions for S1 Detection Lab powerup\nUses built-in Synapse node types where possible\n*/",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detectionlab\\storm\\modules\\s1.detectionlab.model.storm",
+    "chunk_type": "window",
+    "description": "Module comment describing data model definitions for Detection Lab using built-in Synapse node types.",
+    "result_tags": [
+      "scaffolding",
+      "utility"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "maxEmerging=$cmdopts.max_emerging,\n    maxPrevalent=$cmdopts.max_prevalent,\n    prevalentCooldown=$cmdopts.prevalent_cooldown,\n    maxSamples=$cmdopts.max_samples,\n    maxCollect=$cmdopts.max_collect,\n    queryLimit=$cmdopts.query_limit,\n    blacklist=$cmdopts.blacklist,\n    processedMarker=$cmdopts.processed_marker,\n    opticUrl=$cmdopts.optic_url,\n    noSlack=$cmdopts.no_slack,\n    noDetectionValidation=$cmdopts.no_detection_validation,\n    checkMalwareBazaar=$cmdopts.check_malware_bazaar,\n    csv=$cmdopts.csv,\n    debug=$cmdopts.debug,\n    vtCollections=$cmdopts.vt_collections,\n    maxVTSamples=$cmdopts.max_vt_samples,\n    maxVTFamilies=$cmdopts.max_vt_families,\n    maxVTTASamples=$cmdopts.max_vt_ta_samples,\n    maxVTTACollections=$cmdopts.max_vt_ta_collections,\n    maxVTCampaignSamples=$cmdopts.max_vt_campaign_samples,\n    maxVTCampaignCollections=$cmdopts.max_vt_campaign_collections,\n    vtRecencyMultiplier=$cmdopts.vt_recency_multiplier,\n    vtRecencyField=$cmdopts.vt_recency_field,\n    minTotalSamples=$cmdopts.min_total_samples,\n    targetWindowsPct=$cmdopts.target_windows_pct,",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detection-coverage\\storm\\commands\\s1.detection.coverage.collect.storm",
+    "chunk_type": "window",
+    "description": "Function call with named parameters for fresh sentinel malware collection pipeline configuration.",
+    "result_tags": [
+      "configuration",
+      "malware_analysis",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "slack"
+    ]
+  },
+  {
+    "text": "maxPrevalent,\n    prevalentCooldown,\n    maxSamples,\n    maxCollect,\n    queryLimit,\n    blacklist,\n    processedMarker,\n    opticUrl,\n    noSlack,\n    noDetectionValidation,\n    checkMalwareBazaar,\n    csv,\n    debug,\n    vtCollections,\n    maxVTSamples,\n    maxVTFamilies,\n    maxVTTASamples,\n    maxVTTACollections,\n    maxVTCampaignSamples,\n    maxVTCampaignCollections,\n    vtRecencyMultiplier,\n    vtRecencyField,\n    minTotalSamples,\n    targetWindowsPct,\n    targetLinuxPct,",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detection-coverage\\storm\\modules\\s1.detection.coverage.config.storm",
+    "chunk_type": "window",
+    "description": "Parameter list for fresh sentinel collection including Slack, VirusTotal, and detection validation options.",
+    "result_tags": [
+      "configuration",
+      "malware_analysis",
+      "threat_hunting"
+    ],
+    "technique_tags": [
+      "slack"
+    ]
+  },
+  {
+    "text": "Args:\n        timeRange (str): Time range for collection (e.g., \"-10days\", \"-2weeks\")\n        maxEmerging (int): Max families for emerging threats\n        maxPrevalent (int): Max families for prevalent threats\n        prevalentCooldown (int): Number of past runs whose prevalent families are excluded for diversity\n        maxSamples (int): Max samples per family in final report\n        maxCollect (int): Max samples to collect per family (before filtering)\n        queryLimit (int): Max nodes from initial query\n        blacklist (list): Family names to blacklist\n        processedMarker (str): Tag for processed hashes\n        opticUrl (str): Base URL for Optic instance\n        noSlack (bool): Skip Slack notification\n        noDetectionValidation (bool): Read-only mode - skip tagging and notifications\n        checkMalwareBazaar (bool): Check if hashes exist in Malware Bazaar\n        csv (bool): Output CSV format\n        debug (bool): Enable debug output\n        vtCollections (bool): Enable VirusTotal collection processing\n        maxVTSamples (int): Max samples per VT malware collection per cycle\n        maxVTFamilies (int): Max VT malware collection families to process\n        maxVTTASamples (int): Max samples per VT threat-actor collection\n        maxVTTACollections (int): Max VT threat-actor collections to process\n        maxVTCampaignSamples (int): Max samples per VT campaign collection\n        maxVTCampaignCollections (int): Max VT campaign collections to process\n        vtRecencyMultiplier (int): Multiplier for VT recency window",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detection-coverage\\storm\\modules\\s1.detection.coverage.config.storm",
+    "chunk_type": "window",
+    "description": "Docstring parameter documentation for time range, family limits, and sample collection settings.",
+    "result_tags": [
+      "configuration",
+      "documentation",
+      "malware_analysis"
+    ],
+    "technique_tags": [
+      "slack"
+    ]
+  },
+  {
+    "text": "noSlack (bool): Skip Slack notification\n        noDetectionValidation (bool): Read-only mode - skip tagging and notifications\n        checkMalwareBazaar (bool): Check if hashes exist in Malware Bazaar\n        csv (bool): Output CSV format\n        debug (bool): Enable debug output\n        vtCollections (bool): Enable VirusTotal collection processing\n        maxVTSamples (int): Max samples per VT malware collection per cycle\n        maxVTFamilies (int): Max VT malware collection families to process\n        maxVTTASamples (int): Max samples per VT threat-actor collection\n        maxVTTACollections (int): Max VT threat-actor collections to process\n        maxVTCampaignSamples (int): Max samples per VT campaign collection\n        maxVTCampaignCollections (int): Max VT campaign collections to process\n        vtRecencyMultiplier (int): Multiplier for VT recency window\n        vtRecencyField (str): VT date field for recency filtering ('first' or 'last')\n        minTotalSamples (int): Minimum total samples target for auto-boost\n        targetWindowsPct (int): Target Windows sample percentage\n        targetLinuxPct (int): Target Linux sample percentage\n        targetMacosPct (int): Target macOS sample percentage\n        autoDiscoverTA (bool): Enable auto-discovery of threat actor collections\n        maxDiscoverTA (int): Max threat actor collections to auto-discover\n        autoDiscoverCampaigns (bool): Enable auto-discovery of campaign collections\n        maxDiscoverCampaigns (int): Max campaign collections to auto-discover\n        \n    Returns:\n        dict: Validated configuration with camelCase keys",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detection-coverage\\storm\\modules\\s1.detection.coverage.config.storm",
+    "chunk_type": "window",
+    "description": "Docstring describing Slack, detection validation, Malware Bazaar, CSV, and VirusTotal parameters.",
+    "result_tags": [
+      "configuration",
+      "documentation",
+      "malware_analysis"
+    ],
+    "technique_tags": [
+      "slack"
+    ]
+  },
+  {
+    "text": "// Windows PE formats\n    if ($tt.startswith('pe') or $tt = 'dll' or $tt = 'exe') {\n        return('windows')\n    }\n    \n    // Windows document formats (predominantly Windows malware vectors)\n    if ($tt = 'doc' or $tt = 'docx' or $tt = 'xls' or $tt = 'xlsx' or $tt = 'rtf' or $tt = 'ppt' or $tt = 'pptx') {\n        return('windows')\n    }\n    \n    // Windows script formats\n    if ($tt = 'vbs' or $tt = 'ps1' or $tt = 'bat' or $tt = 'cmd' or $tt = 'msi' or $tt = 'hta') {\n        return('windows')\n    }\n    \n    // Linux ELF\n    if ($tt = 'elf') {\n        return('linux')\n    }\n    \n    // macOS formats\n    if ($tt = 'macho' or $tt = 'dmg' or $tt = 'pkg') {\n        return('macos')\n    }",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-detection-coverage\\storm\\modules\\s1.detection.coverage.utils.storm",
+    "chunk_type": "window",
+    "description": "Classifies a file type string to its target OS platform (Windows, Linux, macOS) for malware triage.",
+    "result_tags": [
+      "file_enrichment",
+      "malware_analysis"
+    ],
+    "technique_tags": [
+      "conditional",
+      "return"
+    ]
+  },
+  {
+    "text": "\"last_active_time\",\n    \"region\",\n    \"snapshot_date\",\n    // Management\n    \"account_id\",\n    \"account_name\",\n    \"agent_account_id\",\n    \"customer_name\",\n    \"mgmt_id\",\n    \"mgmt_name\",\n    \"sf_id\",\n    \"sf_id18\",\n    // Agent info\n    \"agent_type\",\n    \"bundle_sku\",\n    // OS & hardware\n    \"hardware_information\",\n    \"machine_type\",\n    \"model_name\",\n    \"os_arch\",\n    \"os_family\",\n    \"os_name\",\n    \"os_revision\",\n    // Version & state\n    \"major_version\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-bde\\synmods\\bde\\assets\\storm\\modules\\s1.bde.api.mgmt_console.storm",
+    "chunk_type": "window",
+    "description": "SentinelOne endpoint agent field name list for data normalization and node property mapping.",
+    "result_tags": [
+      "configuration",
+      "scaffolding"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "// Agent info\n    \"agent_type\",\n    \"bundle_sku\",\n    // OS & hardware\n    \"hardware_information\",\n    \"machine_type\",\n    \"model_name\",\n    \"os_arch\",\n    \"os_family\",\n    \"os_name\",\n    \"os_revision\",\n    // Version & state\n    \"major_version\",\n    \"mitigation_mode\",\n    \"operational_state\",\n    \"user_actions_needed\",\n    \"version_name\",\n    // Site & group\n    \"group_id\",\n    \"site_id\",\n    // Activity flags\n    \"cpu_id\",\n    \"is_active\",\n    \"is_active_1d\",\n    \"is_active_10d\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-bde\\synmods\\bde\\assets\\storm\\modules\\s1.bde.api.mgmt_console.storm",
+    "chunk_type": "window",
+    "description": "SentinelOne endpoint agent OS, version, and operational state field names for property mapping.",
+    "result_tags": [
+      "configuration",
+      "scaffolding"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"customer_type\",\n    \"employee_count\",\n    \"industry\",\n    \"salesforce_account_id\",\n    // Dates\n    \"contract_end_date\",\n    \"customer_since_date\",\n    \"is_customer_first_year\",\n    \"next_opportunity_closed_date\",\n    \"next_renewal_date\",\n    // Deployment\n    \"deployment_percent\",\n    \"planned_endpoint_count\",\n    // Location & status\n    \"account_segment\",\n    \"billing_country\",\n    \"customer_journey_stage\",\n    \"has_data_issue\",\n    \"region\",\n    \"status\",\n    // TAM & support\n    \"has_enterprise_support\",\n    \"has_professional_support\",\n    \"has_tam_family\",\n    \"support_plan\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-bde\\synmods\\bde\\assets\\storm\\modules\\s1.bde.api.salesforce_datamart.storm",
+    "chunk_type": "window",
+    "description": "SentinelOne account and customer metadata field names for CRM and deployment data ingestion.",
+    "result_tags": [
+      "configuration",
+      "scaffolding"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"planned_endpoint_count\",\n    // Location & status\n    \"account_segment\",\n    \"billing_country\",\n    \"customer_journey_stage\",\n    \"has_data_issue\",\n    \"region\",\n    \"status\",\n    // TAM & support\n    \"has_enterprise_support\",\n    \"has_professional_support\",\n    \"has_tam_family\",\n    \"support_plan\",\n    \"tam_plan\",\n    // Product flags\n    \"has_dataset\",\n    \"has_go_license\",\n    \"has_identity_on_prem\",\n    \"has_vigilance_respond\",\n    \"has_vigilance_respond_pro\",\n    \"has_watch_tower\",\n    \"mobile_license\",\n    \"ranger_status\",\n    // License counts\n    \"complete_license_count\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-bde\\synmods\\bde\\assets\\storm\\modules\\s1.bde.api.salesforce_datamart.storm",
+    "chunk_type": "window",
+    "description": "SentinelOne account location, status, TAM, and support field names for data normalization.",
+    "result_tags": [
+      "configuration",
+      "scaffolding"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"support_plan\",\n    \"tam_plan\",\n    // Product flags\n    \"has_dataset\",\n    \"has_go_license\",\n    \"has_identity_on_prem\",\n    \"has_vigilance_respond\",\n    \"has_vigilance_respond_pro\",\n    \"has_watch_tower\",\n    \"mobile_license\",\n    \"ranger_status\",\n    // License counts\n    \"complete_license_count\",\n    \"control_license_count\",\n    \"core_license_count\",\n    \"cwpp_complete_license_count\",\n    \"cwpp_control_license_count\",\n    \"epp_complete_license_count\",\n    \"epp_control_license_count\",\n    \"has_complete_license\",\n    \"has_control_license\",\n    \"has_core_license\",\n    \"has_cwpp_complete_license\",\n    \"has_cwpp_control_license\",\n    \"has_epp_complete_license\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-bde\\synmods\\bde\\assets\\storm\\modules\\s1.bde.api.salesforce_datamart.storm",
+    "chunk_type": "window",
+    "description": "SentinelOne product flag and license type field names for entitlement data mapping.",
+    "result_tags": [
+      "configuration",
+      "scaffolding"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"complete_license_count\",\n    \"control_license_count\",\n    \"core_license_count\",\n    \"cwpp_complete_license_count\",\n    \"cwpp_control_license_count\",\n    \"epp_complete_license_count\",\n    \"epp_control_license_count\",\n    \"has_complete_license\",\n    \"has_control_license\",\n    \"has_core_license\",\n    \"has_cwpp_complete_license\",\n    \"has_cwpp_control_license\",\n    \"has_epp_complete_license\",\n    \"has_epp_control_license\",\n    \"has_hologram_license\",\n    \"has_k8_complete_license\",\n    \"has_k8_control_license\",\n    \"has_on_prem_license\",\n    \"hologram_license_count\",\n    \"k8_complete_license_count\",\n    \"k8_control_license_count\",\n    \"total_endpoint_license_count\",\n    // CSM\n    \"csm_engagement_type\",\n    \"csm_sentiment\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-bde\\synmods\\bde\\assets\\storm\\modules\\s1.bde.api.salesforce_datamart.storm",
+    "chunk_type": "window",
+    "description": "SentinelOne license count field names for complete, control, core, and CWPP SKUs.",
+    "result_tags": [
+      "configuration",
+      "scaffolding"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "\"has_epp_complete_license\",\n    \"has_epp_control_license\",\n    \"has_hologram_license\",\n    \"has_k8_complete_license\",\n    \"has_k8_control_license\",\n    \"has_on_prem_license\",\n    \"hologram_license_count\",\n    \"k8_complete_license_count\",\n    \"k8_control_license_count\",\n    \"total_endpoint_license_count\",\n    // CSM\n    \"csm_engagement_type\",\n    \"csm_sentiment\",\n    \"csm_status\",\n    // Team members\n    \"account_owner_id\",\n    \"account_owner_name\",\n    \"channel_business_manager_id\",\n    \"channel_business_manager_name\",\n    \"cs_identified_risk\",\n    \"customer_success_manager_id\",\n    \"customer_success_manager_name\",\n    \"executive_sponsor_id\",\n    \"executive_sponsor_name\",\n    \"sales_engineer_id\",",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-bde\\synmods\\bde\\assets\\storm\\modules\\s1.bde.api.salesforce_datamart.storm",
+    "chunk_type": "window",
+    "description": "SentinelOne advanced license, CSM, and team member field names for account data mapping.",
+    "result_tags": [
+      "configuration",
+      "scaffolding"
+    ],
+    "technique_tags": []
+  },
+  {
+    "text": "// Remove a byte storage bucket by name\ninit {\n    $s3 = $lib.import(s1.axon.s3)\n}\n\n$result = $s3.removeReadBucket($cmdopts.bucket)\n$lib.print(`Removed byte storage bucket: {$result.bucket}`)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-axon-s3\\synmods\\axon_s3\\assets\\storm\\commands\\s1.s3.bucket.bytes.del.storm",
+    "chunk_type": "window",
+    "description": "Removes a named S3 byte storage bucket using the axon.s3 module.",
+    "result_tags": [
+      "configuration",
+      "node_deletion"
+    ],
+    "technique_tags": [
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "// Remove a data bucket by role\ninit {\n    $s3 = $lib.import(s1.axon.s3)\n}\n\n$result = $s3.removeDataBucket($cmdopts.role)\n$lib.print(`Removed data bucket: role={$result.role}, bucket={$result.bucket}`)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-axon-s3\\synmods\\axon_s3\\assets\\storm\\commands\\s1.s3.bucket.data.del.storm",
+    "chunk_type": "window",
+    "description": "Removes a data bucket by role using the axon.s3 module and prints confirmation.",
+    "result_tags": [
+      "configuration",
+      "node_deletion"
+    ],
+    "technique_tags": [
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "// List all configured data buckets\ninit {\n    $s3 = $lib.import(s1.axon.s3)\n}\n\n$buckets = $s3.listDataBuckets()\n\n$lib.print(`Data Buckets ({$lib.len($buckets)}):`)\n$lib.print(``)\n\nfor $bucket in $buckets {\n    $lib.print(`  Role: {$bucket.role}`)\n    $lib.print(`    Bucket: {$bucket.name}`)\n    $lib.print(`    Region: {$bucket.region}`)\n    if $bucket.profile {\n        $lib.print(`    Profile: {$bucket.profile}`)\n    }\n    if $lib.len($bucket.allowed_prefixes) {\n        $lib.print(`    Allowed Prefixes: {$lib.str.join(\", \", $bucket.allowed_prefixes)}`)\n    }\n    if $bucket.has_kms {\n        $lib.print(`    KMS: Enabled`)\n    }\n    $lib.print(``)\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-axon-s3\\synmods\\axon_s3\\assets\\storm\\commands\\s1.s3.bucket.data.list.storm",
+    "chunk_type": "window",
+    "description": "Lists all configured S3 data buckets with role, name, region, and allowed prefixes.",
+    "result_tags": [
+      "configuration",
+      "reporting"
+    ],
+    "technique_tags": [
+      "for_loop",
+      "init_block",
+      "lib_print",
+      "str_ops"
+    ]
+  },
+  {
+    "text": "// Manually save cache to persistent storage\ninit {\n    $s3 = $lib.import(s1.axon.s3)\n}\n\n$result = $s3.saveCache()\n$lib.print(`Saved {$result.entries} cache entries to persistent storage`)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-axon-s3\\synmods\\axon_s3\\assets\\storm\\commands\\s1.s3.cache.save.storm",
+    "chunk_type": "window",
+    "description": "Saves the axon S3 cache to persistent storage and reports the entry count.",
+    "result_tags": [
+      "configuration",
+      "utility"
+    ],
+    "technique_tags": [
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "// Show bucket statistics and cache performance\ninit {\n    $s3 = $lib.import(s1.axon.s3)\n}\n\n$stats = $s3.getBucketStats()\n\n$lib.print(`S1-Axon-S3 Statistics`)\n$lib.print(`==================================================`)\n$lib.print(``)\n\n$lib.print(`Cache:`)\n$lib.print(`  Enabled: {$stats.cache_enabled}`)\n$lib.print(`  Size: {$stats.cache_size} / {$stats.cache_max_size}`)\n$lib.print(`  Hits: {$stats.stats.cache_hits}`)\n$lib.print(`  Misses: {$stats.stats.cache_misses}`)\n$lib.print(``)\n\n$lib.print(`Primary Axon:`)\n$lib.print(`  Hits: {$stats.stats.primary_hits}`)\n$lib.print(``)\n\n$lib.print(`Read Buckets:`)",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-axon-s3\\synmods\\axon_s3\\assets\\storm\\commands\\s1.s3.stats.storm",
+    "chunk_type": "window",
+    "description": "Displays S3 bucket statistics including cache hit/miss rates and storage metrics.",
+    "result_tags": [
+      "configuration",
+      "reporting"
+    ],
+    "technique_tags": [
+      "init_block",
+      "lib_print"
+    ]
+  },
+  {
+    "text": "function file(size, hashes){\n    // Create file:bytes node with all available metadata\n    [\n        file:bytes=$hashes.sha256\n            :size = $size\n            :md5 ?= $hashes.md5\n            :sha1 ?= $hashes.sha1\n            :sha512 ?= $hashes.sha512\n    ]\n    return ($node)\n}",
+    "file": "G:\\SynSyn\\sentinel-labs\\s1-axon-s3\\synmods\\axon_s3\\assets\\storm\\modules\\s1.axon.s3.ingest.storm",
+    "chunk_type": "function",
+    "description": "Creates a file:bytes node in Synapse with SHA256, size, MD5, SHA1, and SHA512 hash properties.",
+    "result_tags": [
+      "file_enrichment",
+      "hash_enrichment",
+      "node_creation"
+    ],
+    "technique_tags": [
+      "function_def",
+      "node_creation",
+      "return"
+    ]
+  }
+]
