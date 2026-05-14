@@ -45,7 +45,7 @@ jobs:
         run: |
           mkdir -p bin
           CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
-            go build -ldflags="-s -w" -o bin/storm-mcp-linux-amd64 .
+            go build -tags embedquery -ldflags="-s -w" -o bin/storm-mcp-linux-amd64 .
 
       - name: Package
         run: |
@@ -88,7 +88,7 @@ jobs:
         run: |
           mkdir -p bin
           CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc \
-            go build -ldflags="-s -w" -o bin/storm-mcp.exe .
+            go build -tags embedquery -ldflags="-s -w" -o bin/storm-mcp.exe .
 
       - name: Package
         run: |
@@ -126,7 +126,7 @@ jobs:
         run: |
           mkdir -p bin
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
-            go build -ldflags="-s -w" -o bin/storm-mcp-darwin-arm64 .
+            go build -tags embedquery -ldflags="-s -w" -o bin/storm-mcp-darwin-arm64 .
 
       - name: Package
         run: |
@@ -165,7 +165,7 @@ jobs:
         run: |
           mkdir -p bin
           CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
-            go build -ldflags="-s -w" -o bin/storm-mcp-darwin-amd64 .
+            go build -tags embedquery -ldflags="-s -w" -o bin/storm-mcp-darwin-amd64 .
 
       - name: Package
         run: |
