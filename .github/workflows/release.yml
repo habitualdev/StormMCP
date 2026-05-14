@@ -1,0 +1,191 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  ORT_VERSION: 1.25.1
+  GO_VERSION: '1.22'
+
+jobs:
+
+  # ── Linux amd64 ───────────────────────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Download ORT (Linux amd64)
+        run: |
+          mkdir -p assets
+          curl -fsSL \
+            "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-linux-x64-${ORT_VERSION}.tgz" \
+            | tar -xz -O --wildcards "*/lib/libonnxruntime.so.${ORT_VERSION}" \
+            > assets/onnxruntime_linux_amd64.so
+
+      - name: Build
+        run: |
+          mkdir -p bin
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
+            go build -ldflags="-s -w" -o bin/storm-mcp-linux-amd64 .
+
+      - name: Package
+        run: |
+          mkdir -p dist staging/storm-mcp-linux
+          cp bin/storm-mcp-linux-amd64 staging/storm-mcp-linux/storm-mcp
+          chmod +x staging/storm-mcp-linux/storm-mcp
+          tar -czf dist/storm-mcp-linux.tar.gz -C staging storm-mcp-linux/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux
+          path: dist/storm-mcp-linux.tar.gz
+
+  # ── Windows amd64 (cross-compiled from Ubuntu with MinGW) ────────────────────
+  build-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install MinGW cross-compiler
+        run: sudo apt-get install -y gcc-mingw-w64-x86-64
+
+      - name: Download ORT (Windows amd64)
+        run: |
+          mkdir -p assets
+          curl -fsSL \
+            "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-win-x64-${ORT_VERSION}.zip" \
+            -o /tmp/ort-win.zip
+          unzip -p /tmp/ort-win.zip \
+            "onnxruntime-win-x64-${ORT_VERSION}/lib/onnxruntime.dll" \
+            > assets/onnxruntime_windows_amd64.dll
+
+      - name: Build
+        run: |
+          mkdir -p bin
+          CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc \
+            go build -ldflags="-s -w" -o bin/storm-mcp.exe .
+
+      - name: Package
+        run: |
+          mkdir -p dist staging/storm-mcp-win
+          cp bin/storm-mcp.exe staging/storm-mcp-win/
+          cd staging && zip -r ../dist/storm-mcp-win.zip storm-mcp-win/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows
+          path: dist/storm-mcp-win.zip
+
+  # ── macOS arm64 (Apple Silicon) ──────────────────────────────────────────────
+  build-darwin-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Download ORT (macOS arm64)
+        run: |
+          mkdir -p assets
+          curl -fsSL \
+            "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-osx-arm64-${ORT_VERSION}.tgz" \
+            | tar -xz -O \
+              "onnxruntime-osx-arm64-${ORT_VERSION}/lib/libonnxruntime.${ORT_VERSION}.dylib" \
+            > assets/onnxruntime_darwin_arm64.dylib
+
+      - name: Build
+        run: |
+          mkdir -p bin
+          CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
+            go build -ldflags="-s -w" -o bin/storm-mcp-darwin-arm64 .
+
+      - name: Package
+        run: |
+          mkdir -p dist staging/storm-mcp-darwin-arm64
+          cp bin/storm-mcp-darwin-arm64 staging/storm-mcp-darwin-arm64/storm-mcp
+          chmod +x staging/storm-mcp-darwin-arm64/storm-mcp
+          tar -czf dist/storm-mcp-darwin-arm64.tar.gz -C staging storm-mcp-darwin-arm64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-darwin-arm64
+          path: dist/storm-mcp-darwin-arm64.tar.gz
+
+  # ── macOS amd64 (Intel) ──────────────────────────────────────────────────────
+  build-darwin-amd64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Download ORT (macOS amd64)
+        run: |
+          mkdir -p assets
+          curl -fsSL \
+            "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-osx-x86_64-${ORT_VERSION}.tgz" \
+            | tar -xz -O \
+              "onnxruntime-osx-x86_64-${ORT_VERSION}/lib/libonnxruntime.${ORT_VERSION}.dylib" \
+            > assets/onnxruntime_darwin_amd64.dylib
+
+      - name: Build
+        run: |
+          mkdir -p bin
+          CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
+            go build -ldflags="-s -w" -o bin/storm-mcp-darwin-amd64 .
+
+      - name: Package
+        run: |
+          mkdir -p dist staging/storm-mcp-darwin-amd64
+          cp bin/storm-mcp-darwin-amd64 staging/storm-mcp-darwin-amd64/storm-mcp
+          chmod +x staging/storm-mcp-darwin-amd64/storm-mcp
+          tar -czf dist/storm-mcp-darwin-amd64.tar.gz -C staging storm-mcp-darwin-amd64/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-darwin-amd64
+          path: dist/storm-mcp-darwin-amd64.tar.gz
+
+  # ── Create GitHub Release ─────────────────────────────────────────────────────
+  release:
+    needs: [build-linux, build-windows, build-darwin-arm64, build-darwin-amd64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || inputs.tag }}
+          generate_release_notes: true
+          files: |
+            dist/storm-mcp-linux.tar.gz
+            dist/storm-mcp-win.zip
+            dist/storm-mcp-darwin-arm64.tar.gz
+            dist/storm-mcp-darwin-amd64.tar.gz

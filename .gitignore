@@ -1,0 +1,28 @@
+# Build output
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# ONNX Runtime libraries (downloaded at build time via make or CI)
+assets/
+
+# Large data files (populated locally via make prepare)
+model/
+synapse_db/
+corpus/
+
+# Build staging
+.dist-staging-*/
+
+# Legacy Python files
+*.py
+
+# Test artifacts
+*.txt
+
+# Go workspace
+go.work
+go.work.sum

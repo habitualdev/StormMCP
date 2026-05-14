@@ -1,0 +1,33 @@
+# Builder image for Linux AMD64 and ARM64 binaries.
+# Also includes mingw-w64 so Windows binaries can be cross-compiled from CI.
+#
+# Usage (called by Makefile):
+#   docker build -f Dockerfile.linux -t storm-mcp-builder .
+#   docker run --rm -v "$(pwd):/src" -w /src -e GOARCH=amd64 storm-mcp-builder \
+#       go build -ldflags="-s -w" -o bin/storm-mcp-linux-amd64 .
+
+FROM golang:1.22-bookworm
+
+# CGO toolchains:
+#   gcc             — linux/amd64 (host)
+#   aarch64-linux-gnu-gcc — linux/arm64 cross
+#   x86_64-w64-mingw32-gcc — windows/amd64 cross
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        libc6-dev \
+        gcc-aarch64-linux-gnu \
+        libc6-dev-arm64-cross \
+        gcc-mingw-w64-x86-64 \
+        unzip \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV CGO_ENABLED=1
+
+# Pre-download Go module dependencies so repeated builds use the image cache.
+# Invalidated only when go.mod / go.sum change.
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Source is mounted at /src at run time — nothing else to COPY.
