@@ -99,28 +99,19 @@ $(ASSETS_DIR)/onnxruntime_darwin_arm64.dylib: | $(ASSETS_DIR)
 # Dev build: no CGo, no ONNX Runtime — tests the MCP protocol layer only.
 .PHONY: build-stub
 build-stub: | $(BIN_DIR)
-	CGO_ENABLED=0 go build -tags noort \
-	  -ldflags="-s -w" \
-	  -o $(BIN_DIR)/$(BINARY_NAME)-stub.exe \
-	  .
+	powershell -NoProfile -Command "$$env:CGO_ENABLED=0; go build -tags noort -ldflags='-s -w' -o $(BIN_DIR)/$(BINARY_NAME)-stub.exe ."
 	@echo "Built stub: $(BIN_DIR)/$(BINARY_NAME)-stub.exe"
 
 # Windows amd64 — native (requires CGo + ORT DLL in assets/).
 .PHONY: build
 build: $(ASSETS_DIR)/onnxruntime_windows_amd64.dll | $(BIN_DIR)
-	CGO_ENABLED=1 go build \
-	  -ldflags="-s -w" \
-	  -o $(BIN_DIR)/$(BINARY_NAME).exe \
-	  .
+	powershell -NoProfile -Command "$$env:CGO_ENABLED=1; go build -ldflags='-s -w' -o $(BIN_DIR)/$(BINARY_NAME).exe ."
 	@echo "Built: $(BIN_DIR)/$(BINARY_NAME).exe"
 
 # Windows amd64 with embedded CodeT5 query generator.
 .PHONY: build-full
 build-full: $(ASSETS_DIR)/onnxruntime_windows_amd64.dll | $(BIN_DIR)
-	CGO_ENABLED=1 go build -tags embedquery \
-	  -ldflags="-s -w" \
-	  -o $(BIN_DIR)/$(BINARY_NAME)-full.exe \
-	  .
+	powershell -NoProfile -Command "$$env:CGO_ENABLED=1; go build -tags embedquery -ldflags='-s -w' -o $(BIN_DIR)/$(BINARY_NAME)-full.exe ."
 	@echo "Built: $(BIN_DIR)/$(BINARY_NAME)-full.exe"
 
 # Linux amd64 — cross-compiled via WSL (same pattern as darwin).
