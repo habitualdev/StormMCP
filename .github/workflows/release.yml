@@ -142,7 +142,7 @@ jobs:
 
   # ── macOS amd64 (Intel) ──────────────────────────────────────────────────────
   build-darwin-amd64:
-    runs-on: macos-13
+    runs-on: macos-26-large
     steps:
       - uses: actions/checkout@v4
         with:
