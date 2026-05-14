@@ -16,7 +16,7 @@
 #   make build-all                # all three release platforms (from WSL)
 
 BINARY_NAME   := storm-mcp
-ORT_VERSION   := 1.25.1
+ORT_VERSION   := 1.22.0
 ASSETS_DIR    := assets
 BIN_DIR       := bin
 
